@@ -1,13 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { computeSignature } from '../webhooks/verify.js';
 
 // Mock env module
 vi.mock('../config/env.js', () => ({
   getEnv: () => ({
-    META_APP_SECRET: 'test_secret',
-    META_VERIFY_TOKEN: 'test_verify_token',
-    INSTAGRAM_PAGE_ACCESS_TOKEN: 'test_token',
-    INSTAGRAM_PAGE_ID: '123',
+    ZERNIO_API_KEY: 'test_key',
+    ZERNIO_WEBHOOK_SECRET: 'test_secret',
+    ZERNIO_ACCOUNT_ID: 'acc_123',
     PORT: 3000,
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
@@ -22,7 +21,7 @@ describe('webhook signature verification', () => {
     const payload = JSON.stringify({ test: 'data' });
     const signature = computeSignature(secret, payload);
 
-    expect(signature).toMatch(/^sha256=[a-f0-9]{64}$/);
+    expect(signature).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it('produces consistent signatures for same input', () => {
@@ -46,36 +45,5 @@ describe('webhook signature verification', () => {
     const sig2 = computeSignature('secret2', payload);
 
     expect(sig1).not.toBe(sig2);
-  });
-});
-
-describe('webhook verification challenge', () => {
-  it('validates the challenge flow logic', () => {
-    const mode = 'subscribe';
-    const token = 'test_verify_token';
-    const challenge = 'challenge_code_123';
-    const expectedToken = 'test_verify_token';
-
-    const isValid = mode === 'subscribe' && token === expectedToken;
-    expect(isValid).toBe(true);
-    expect(challenge).toBe('challenge_code_123');
-  });
-
-  it('rejects wrong verify token', () => {
-    const mode = 'subscribe';
-    const token = 'wrong_token';
-    const expectedToken = 'test_verify_token';
-
-    const isValid = mode === 'subscribe' && token === expectedToken;
-    expect(isValid).toBe(false);
-  });
-
-  it('rejects wrong mode', () => {
-    const mode = 'unsubscribe';
-    const token = 'test_verify_token';
-    const expectedToken = 'test_verify_token';
-
-    const isValid = mode === 'subscribe' && token === expectedToken;
-    expect(isValid).toBe(false);
   });
 });

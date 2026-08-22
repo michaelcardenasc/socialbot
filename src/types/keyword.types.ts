@@ -5,10 +5,25 @@ export interface MessageButton {
   payload?: string;
 }
 
+export interface MediaAttachment {
+  type: 'image' | 'audio' | 'video' | 'file';
+  url: string;
+  caption?: string;
+}
+
+export interface SequenceStep {
+  delay?: number;        // seconds to wait before sending this step
+  text?: string;
+  media?: MediaAttachment;
+  buttons?: MessageButton[];
+}
+
 export interface KeywordResponse {
-  type: 'text' | 'button';
+  type: 'text' | 'button' | 'media' | 'sequence';
   text: string;
   buttons?: MessageButton[];
+  media?: MediaAttachment[];    // Direct media attachments
+  sequence?: SequenceStep[];     // Multi-step message sequence
 }
 
 export interface KeywordRule {
@@ -20,6 +35,8 @@ export interface KeywordRule {
   enabled: boolean;
   cooldownMinutes: number;
   askEmail?: boolean;
+  platforms?: string[];           // Which platforms this rule applies to
+  commentReply?: string;          // Optional public reply to the comment
   response: KeywordResponse;
   followUp?: KeywordResponse;
 }

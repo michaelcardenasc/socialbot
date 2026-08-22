@@ -1,6 +1,6 @@
 import { logger } from '../utils/logger.js';
 import { getLeadsPendingEmailReminder, setLeadStatus } from './lead.service.js';
-import { sendTextDM } from './instagram.service.js';
+import { sendTextDM } from './zernio.service.js';
 import { logDM } from './dmlog.service.js';
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -12,13 +12,14 @@ export function startEmailReminder(): void {
       const leads = await getLeadsPendingEmailReminder();
 
       for (const lead of leads) {
+        if (!lead.conversation_id) continue;
         try {
           await sendTextDM(
-            lead.ig_user_id,
+            lead.conversation_id,
             'Ups! Parece que te ocupaste y olvidaste ingresar tu correo electronico.',
           );
           await sendTextDM(
-            lead.ig_user_id,
+            lead.conversation_id,
             'Puedo enviarte el link de registro? Ingresa tu correo electronico abajo!',
           );
           await setLeadStatus(lead.ig_user_id, 'email_reminded');
@@ -28,6 +29,8 @@ export function startEmailReminder(): void {
             direction: 'outbound',
             messageType: 'reminder',
             content: 'Email reminder',
+            platform: lead.platform,
+            conversationId: lead.conversation_id
           }).catch(() => {});
 
           logger.info({ igUserId: lead.ig_user_id }, 'Email reminder sent');

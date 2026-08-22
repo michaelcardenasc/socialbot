@@ -1,64 +1,105 @@
 [
   {
-    "id": "freebie",
-    "keyword": "FREEBIE",
-    "aliases": ["FREE", "DOWNLOAD"],
+    "id": "infoproducto",
+    "keyword": "infoproducto",
+    "aliases": ["info", "producto"],
     "matchType": "contains",
     "priority": 1,
     "enabled": true,
     "cooldownMinutes": 60,
+    "askEmail": false,
+    "platforms": ["instagram", "facebook"],
+    "commentReply": "¡Te acabo de enviar la info por DM! 🚀",
+    "response": {
+      "type": "sequence",
+      "text": "Iniciando secuencia",
+      "sequence": [
+        {
+          "delay": 0,
+          "text": "¡Hola {{username}}! Qué bueno que te interesa nuestro infoproducto."
+        },
+        {
+          "delay": 2,
+          "media": {
+            "type": "audio",
+            "url": "https://tu-cdn.com/audio-intro.mp3"
+          }
+        },
+        {
+          "delay": 5,
+          "media": {
+            "type": "image",
+            "url": "https://tu-cdn.com/preview-infoproducto.jpg",
+            "caption": "Mira un adelanto de lo que aprenderás."
+          }
+        },
+        {
+          "delay": 3,
+          "text": "Aquí tienes el enlace para acceder con un descuento especial.",
+          "buttons": [
+            {
+              "type": "web_url",
+              "title": "Comprar ahora",
+              "url": "https://tu-sitio.com/checkout/infoproducto"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "freebie",
+    "keyword": "regalo",
+    "aliases": ["gratis", "descargar"],
+    "matchType": "contains",
+    "priority": 2,
+    "enabled": true,
+    "cooldownMinutes": 60,
     "askEmail": true,
+    "platforms": ["instagram", "facebook"],
+    "commentReply": "¡Revisa tus DMs para el regalo! 🎁",
     "response": {
       "type": "button",
-      "text": "Hey {{username}}! Glad you're interested in the free resource!",
+      "text": "¡Hola {{username}}! Qué bueno que quieres el recurso gratuito.",
       "buttons": [
         {
           "type": "postback",
-          "title": "Send it to me",
+          "title": "Envíamelo",
           "payload": "start_email:freebie"
         }
       ]
     },
     "followUp": {
       "type": "button",
-      "text": "Here's the link to your free resource. I also sent it to your email:",
+      "text": "Aquí tienes el enlace a tu recurso gratuito. También te lo envié por correo:",
       "buttons": [
         {
           "type": "web_url",
-          "title": "Get the resource",
-          "url": "https://your-site.com/freebie"
+          "title": "Obtener recurso",
+          "url": "https://tu-sitio.com/recurso-gratis"
         }
       ]
     }
   },
   {
-    "id": "course",
-    "keyword": "COURSE",
-    "aliases": ["CLASS", "LEARN"],
+    "id": "curso",
+    "keyword": "curso",
+    "aliases": ["clase", "aprender"],
     "matchType": "contains",
-    "priority": 2,
+    "priority": 3,
     "enabled": true,
     "cooldownMinutes": 60,
-    "askEmail": true,
+    "askEmail": false,
+    "platforms": ["instagram"],
+    "commentReply": "¡Te mando los detalles del curso al privado! 📚",
     "response": {
-      "type": "button",
-      "text": "Hey {{username}}! Great that you want to learn! I have something for you.",
-      "buttons": [
+      "type": "media",
+      "text": "¡Hola {{username}}! Aquí tienes un video sobre el curso.",
+      "media": [
         {
-          "type": "postback",
-          "title": "Show me the course",
-          "payload": "start_email:course"
-        }
-      ]
-    },
-    "followUp": {
-      "type": "button",
-      "text": "Here's the link to the course. I also sent it to your email:",
-      "buttons": [
-        {
-          "type": "web_url",
-          "title": "View the course",
-          "url": "https://your-site.com/course"
+          "type": "video",
+          "url": "https://tu-cdn.com/video-curso.mp4",
+          "caption": "Descubre todo lo que aprenderás en el curso."
         }
       ]
     }

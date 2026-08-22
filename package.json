@@ -12,6 +12,7 @@
     "import:csv": "tsx src/scripts/import-csv.ts"
   },
   "dependencies": {
+    "@zernio/node": "^0.2.612",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "pino": "^9.6.0",

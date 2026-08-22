@@ -1,7 +1,7 @@
-import type { MetaCommentValue } from '../types/meta.types.js';
+import type { ZernioCommentData } from '../types/zernio.types.js';
 import { matchKeyword } from '../services/keyword.service.js';
 import { isOnCooldown, isRateLimited, recordTrigger } from '../services/cooldown.service.js';
-import { sendTextDM, sendButtonDM } from '../services/instagram.service.js';
+import { initiateDM, sendTextDM, replyToComment } from '../services/zernio.service.js';
 import { renderTemplate } from '../utils/templates.js';
 import { logger } from '../utils/logger.js';
 import { upsertLead } from '../services/lead.service.js';
@@ -14,12 +14,12 @@ export function maskEmail(email: string): string {
   return `${masked}@${domain}`;
 }
 
-export async function handleComment(comment: MetaCommentValue): Promise<void> {
-  const { from, text, id: commentId } = comment;
-  const userId = from.id;
-  const username = from.username;
+export async function handleComment(comment: ZernioCommentData, accountId: string): Promise<void> {
+  const { sender, text, commentId } = comment;
+  const userId = sender.id;
+  const username = sender.username;
 
-  logger.info({ userId, username, text, commentId }, 'Processing comment');
+  logger.info({ userId, username, text, commentId, accountId }, 'Processing comment');
 
   // 1. Match against keyword rules
   const rule = matchKeyword(text);
@@ -59,12 +59,23 @@ export async function handleComment(comment: MetaCommentValue): Promise<void> {
   const vars = { username };
   const renderedText = renderTemplate(rule.response.text, vars);
 
-  // 6. Send DM
+  // 6. Send DM (initiate from comment)
   try {
+    // For now, we only send text DMs since we are using Zernio.
+    let textToSend = renderedText;
     if (rule.response.type === 'button' && rule.response.buttons?.length) {
-      await sendButtonDM(userId, renderedText, rule.response.buttons);
-    } else {
-      await sendTextDM(userId, renderedText);
+      // Append button options as text instructions for now
+      const buttonTexts = rule.response.buttons.map((b) => `- ${b.title}`).join('\n');
+      textToSend += '\n\nOpciones:\n' + buttonTexts;
+    }
+
+    await initiateDM(accountId, userId, textToSend);
+
+    // Try to reply publicly
+    try {
+      await replyToComment(accountId, commentId, '¡Revisa tus DMs! 📩');
+    } catch (replyErr) {
+      logger.error({ replyErr, commentId }, 'Failed to reply to comment');
     }
 
     // 7. Record trigger & log DM
@@ -74,11 +85,8 @@ export async function handleComment(comment: MetaCommentValue): Promise<void> {
       direction: 'outbound',
       messageType: rule.response.type,
       keywordId: rule.id,
-      content: renderedText,
+      content: textToSend,
     }).catch((err) => logger.error({ err }, 'Failed to log DM'));
-
-    // 8. If askEmail, the response already has a postback button.
-    //    The postback handler will take over when the user clicks it.
 
     logger.info(
       { userId, username, ruleId: rule.id, commentId },
@@ -89,20 +97,24 @@ export async function handleComment(comment: MetaCommentValue): Promise<void> {
   }
 }
 
-export async function sendFollowUp(userId: string, rule: ReturnType<typeof matchKeyword>): Promise<void> {
+export async function sendFollowUp(conversationId: string, rule: ReturnType<typeof matchKeyword>): Promise<void> {
   if (!rule?.followUp) return;
 
+  let textToSend = rule.followUp.text;
   if (rule.followUp.type === 'button' && rule.followUp.buttons?.length) {
-    await sendButtonDM(userId, rule.followUp.text, rule.followUp.buttons);
-  } else {
-    await sendTextDM(userId, rule.followUp.text);
+    const buttonTexts = rule.followUp.buttons.map((b) => `- ${b.title}`).join('\n');
+    textToSend += '\n\nOpciones:\n' + buttonTexts;
   }
 
+  await sendTextDM(conversationId, textToSend);
+
+  // We might not have igUserId directly here easily for logDM unless we change logDM signature or lookup
+  // But for the scope of this migration, keeping it simple as we don't have userId. We'll pass conversationId as igUserId for now.
   logDM({
-    igUserId: userId,
+    igUserId: conversationId,
     direction: 'outbound',
     messageType: 'followup',
     keywordId: rule.id,
-    content: rule.followUp.text,
+    content: textToSend,
   }).catch(() => {});
 }

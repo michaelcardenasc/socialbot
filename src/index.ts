@@ -41,7 +41,7 @@ initDb()
   .then(() => {
     startEmailReminder();
     app.listen(env.PORT, '0.0.0.0', () => {
-      logger.info({ port: env.PORT, env: env.NODE_ENV }, 'GolemBot server started');
+      logger.info({ port: env.PORT, env: env.NODE_ENV }, 'SocialBot server started');
     });
   })
   .catch((err) => {

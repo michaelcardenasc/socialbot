@@ -1,50 +1,49 @@
-import type { MetaMessagingEvent } from '../types/meta.types.js';
+import type { ZernioMessageData } from '../types/zernio.types.js';
 import { logger } from '../utils/logger.js';
 import { getLeadByIgUserId, setLeadStatus } from '../services/lead.service.js';
 import { getKeywordRules } from '../services/keyword.service.js';
 import { sendFollowUp, maskEmail } from './comment.handler.js';
-import { sendTextDM, sendButtonDM } from '../services/instagram.service.js';
+import { sendTextDM } from '../services/zernio.service.js';
 import { sendResourceEmail, sendWelcomeEmail } from '../services/email.service.js';
 import { getEnv } from '../config/env.js';
 
-export async function handlePostback(event: MetaMessagingEvent): Promise<void> {
+export async function handlePostback(event: ZernioMessageData, accountId: string): Promise<void> {
   const senderId = event.sender.id;
-  const payload = event.postback?.payload;
-  const title = event.postback?.title;
+  const conversationId = event.conversationId;
+  const payload = event.metadata?.postbackPayload;
+  const title = event.metadata?.postbackTitle;
 
-  logger.info({ senderId, title, payload }, 'Received postback');
+  logger.info({ senderId, conversationId, title, payload, accountId }, 'Received postback');
 
   if (!payload) return;
 
   if (payload.startsWith('start_email:')) {
-    await handleStartEmail(senderId, payload.replace('start_email:', ''));
+    await handleStartEmail(senderId, conversationId, payload.replace('start_email:', ''));
   } else if (payload.startsWith('confirm_email:')) {
-    await handleConfirmEmail(senderId, payload.replace('confirm_email:', ''));
+    await handleConfirmEmail(senderId, conversationId, payload.replace('confirm_email:', ''));
   } else if (payload.startsWith('change_email:')) {
-    await handleChangeEmail(senderId, payload.replace('change_email:', ''));
+    await handleChangeEmail(senderId, conversationId, payload.replace('change_email:', ''));
   }
 }
 
-async function handleStartEmail(senderId: string, keywordId: string): Promise<void> {
+async function handleStartEmail(senderId: string, conversationId: string, keywordId: string): Promise<void> {
   try {
     const lead = await getLeadByIgUserId(senderId);
 
     if (lead?.email) {
       // Returning user — confirm/change flow
       const masked = maskEmail(lead.email);
-      await sendButtonDM(senderId, `Tengo tu email ${masked}. Te mando el link ahi?`, [
-        { type: 'postback', title: 'Si, mandame ahi', payload: `confirm_email:${keywordId}` },
-        { type: 'postback', title: 'No, cambiar email', payload: `change_email:${keywordId}` },
-      ]);
+      const textToSend = `Tengo tu email ${masked}. Te mando el link ahi?\n\nOpciones:\n👉 Envía "confirm_email:${keywordId}" para sí\n👉 Envía "change_email:${keywordId}" para cambiarlo`;
+      await sendTextDM(conversationId, textToSend);
       await setLeadStatus(senderId, 'email_confirming');
     } else {
       // New user — excitement + ask for email
       await sendTextDM(
-        senderId,
+        conversationId,
         'GENIAL! No puedo esperar a que empieces a explorar todo lo que Golem tiene para ti.',
       );
       await sendTextDM(
-        senderId,
+        conversationId,
         'Para que pueda enviarte el link, cual es tu direccion de correo electronico?',
       );
       await setLeadStatus(senderId, 'email_pending');
@@ -56,7 +55,7 @@ async function handleStartEmail(senderId: string, keywordId: string): Promise<vo
   }
 }
 
-async function handleConfirmEmail(senderId: string, keywordId: string): Promise<void> {
+async function handleConfirmEmail(senderId: string, conversationId: string, keywordId: string): Promise<void> {
   try {
     const lead = await getLeadByIgUserId(senderId);
     if (!lead?.email) {
@@ -67,7 +66,9 @@ async function handleConfirmEmail(senderId: string, keywordId: string): Promise<
     const rule = getKeywordRules().find((r) => r.id === keywordId) ?? null;
 
     // Send followUp DM with the resource
-    await sendFollowUp(senderId, rule);
+    if (rule) {
+      await sendFollowUp(conversationId, rule);
+    }
 
     // Send resource + welcome email
     const env = getEnv();
@@ -90,9 +91,9 @@ async function handleConfirmEmail(senderId: string, keywordId: string): Promise<
   }
 }
 
-async function handleChangeEmail(senderId: string, keywordId: string): Promise<void> {
+async function handleChangeEmail(senderId: string, conversationId: string, keywordId: string): Promise<void> {
   try {
-    await sendTextDM(senderId, 'Ok! Mandame tu mejor email y te lo actualizo.');
+    await sendTextDM(conversationId, 'Ok! Mandame tu mejor email y te lo actualizo.');
     await setLeadStatus(senderId, 'email_pending');
     logger.info({ senderId, keywordId }, 'User wants to change email');
   } catch (err) {

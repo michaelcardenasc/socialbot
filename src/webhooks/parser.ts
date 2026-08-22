@@ -1,38 +1,48 @@
-import type { MetaWebhookPayload, MetaCommentValue, MetaMessagingEvent, MetaMentionValue } from '../types/meta.types.js';
+import type {
+  ZernioWebhookPayload,
+  ParsedZernioEvent,
+  ZernioCommentData,
+  ZernioMessageData,
+} from '../types/zernio.types.js';
 
-export type ParsedEvent =
-  | { type: 'comment'; data: MetaCommentValue }
-  | { type: 'message'; data: MetaMessagingEvent }
-  | { type: 'postback'; data: MetaMessagingEvent }
-  | { type: 'mention'; data: MetaMentionValue };
+export type { ParsedZernioEvent };
 
-export function parseWebhookPayload(payload: MetaWebhookPayload): ParsedEvent[] {
-  const events: ParsedEvent[] = [];
+export function parseWebhookPayload(payload: ZernioWebhookPayload): ParsedZernioEvent[] {
+  const events: ParsedZernioEvent[] = [];
+  const { event, platform, data, accountId } = payload;
 
-  if (payload.object !== 'instagram') return events;
-
-  for (const entry of payload.entry) {
-    // Comment and mention events come via changes
-    if (entry.changes) {
-      for (const change of entry.changes) {
-        if (change.field === 'comments') {
-          events.push({ type: 'comment', data: change.value });
-        } else if (change.field === 'mentions') {
-          events.push({ type: 'mention', data: change.value as unknown as MetaMentionValue });
-        }
-      }
+  if (event === 'comment.received' || event === 'comment.created') {
+    events.push({
+      type: 'comment',
+      platform,
+      data: data as ZernioCommentData,
+      accountId,
+    });
+  } else if (event === 'message.received') {
+    const messageData = data as ZernioMessageData;
+    // Check if the message contains postback payload in metadata
+    if (messageData.metadata?.postbackPayload) {
+      events.push({
+        type: 'postback',
+        platform,
+        data: messageData,
+        accountId,
+      });
+    } else {
+      events.push({
+        type: 'message',
+        platform,
+        data: messageData,
+        accountId,
+      });
     }
-
-    // DM and postback events come via messaging
-    if (entry.messaging) {
-      for (const event of entry.messaging) {
-        if (event.message && !event.message.is_echo) {
-          events.push({ type: 'message', data: event });
-        } else if (event.postback) {
-          events.push({ type: 'postback', data: event });
-        }
-      }
-    }
+  } else if (event === 'reaction.received') {
+    events.push({
+      type: 'reaction',
+      platform,
+      data: data as ZernioMessageData,
+      accountId,
+    });
   }
 
   return events;

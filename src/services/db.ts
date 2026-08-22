@@ -29,6 +29,8 @@ export async function initDb(): Promise<void> {
       phone TEXT,
       source TEXT,
       keyword_id TEXT,
+      platform TEXT NOT NULL DEFAULT 'instagram',
+      conversation_id TEXT,
       status TEXT NOT NULL DEFAULT 'new',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -36,7 +38,7 @@ export async function initDb(): Promise<void> {
   `;
 
   await db`
-    CREATE UNIQUE INDEX IF NOT EXISTS leads_ig_user_id_idx ON leads (ig_user_id)
+    CREATE UNIQUE INDEX IF NOT EXISTS leads_ig_user_id_platform_idx ON leads (ig_user_id, platform)
   `;
 
   await db`
@@ -47,6 +49,8 @@ export async function initDb(): Promise<void> {
       message_type TEXT,
       keyword_id TEXT,
       content TEXT,
+      platform TEXT NOT NULL DEFAULT 'instagram',
+      conversation_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
@@ -56,6 +60,19 @@ export async function initDb(): Promise<void> {
   `;
 
   logger.info('Database initialized');
+  await migrateDb(db);
+}
+
+async function migrateDb(db: ReturnType<typeof postgres>): Promise<void> {
+  try {
+    await db`ALTER TABLE leads ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'instagram'`;
+    await db`ALTER TABLE leads ADD COLUMN IF NOT EXISTS conversation_id TEXT`;
+    
+    await db`ALTER TABLE dm_log ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'instagram'`;
+    await db`ALTER TABLE dm_log ADD COLUMN IF NOT EXISTS conversation_id TEXT`;
+  } catch (err) {
+    logger.error({ err }, 'Error during database migrations');
+  }
 }
 
 export async function closeDb(): Promise<void> {

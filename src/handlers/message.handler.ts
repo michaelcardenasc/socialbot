@@ -1,8 +1,8 @@
-import type { MetaMessagingEvent } from '../types/meta.types.js';
+import type { ZernioMessageData } from '../types/zernio.types.js';
 import { logger } from '../utils/logger.js';
 import { getLeadByIgUserId, setLeadEmail, setLeadStatus, upsertLead } from '../services/lead.service.js';
 import { logDM } from '../services/dmlog.service.js';
-import { sendTextDM, sendButtonDM, getUserProfile } from '../services/instagram.service.js';
+import { sendTextDM, getUserProfile } from '../services/zernio.service.js';
 import { sendWelcomeEmail, sendResourceEmail } from '../services/email.service.js';
 import { getKeywordRules, matchKeyword } from '../services/keyword.service.js';
 import { isOnCooldown, isRateLimited, recordTrigger } from '../services/cooldown.service.js';
@@ -11,12 +11,13 @@ import { getEnv } from '../config/env.js';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export async function handleMessage(event: MetaMessagingEvent): Promise<void> {
+export async function handleMessage(event: ZernioMessageData, accountId: string): Promise<void> {
   const senderId = event.sender.id;
-  const text = event.message?.text?.trim();
-  const mid = event.message?.mid;
+  const text = event.text?.trim();
+  const conversationId = event.conversationId;
+  const mid = event.messageId;
 
-  logger.info({ senderId, text, mid }, 'Received DM');
+  logger.info({ senderId, conversationId, text, mid, accountId }, 'Received DM');
 
   // Log inbound message
   logDM({
@@ -35,17 +36,17 @@ export async function handleMessage(event: MetaMessagingEvent): Promise<void> {
     if (lead && (lead.status === 'email_pending' || lead.status === 'email_confirming' || lead.status === 'email_reminded')) {
       const keywordMatch = matchKeyword(text);
       if (keywordMatch) {
-        await handleKeywordDM(senderId, keywordMatch, lead);
+        await handleKeywordDM(event, accountId, keywordMatch, lead);
         return;
       }
-      await handleEmailCollection(senderId, text, lead);
+      await handleEmailCollection(event, accountId, text, lead);
       return;
     }
 
     // 2. Keyword matching (ice breakers, manual keyword DMs)
     const rule = matchKeyword(text);
     if (rule) {
-      await handleKeywordDM(senderId, rule, lead);
+      await handleKeywordDM(event, accountId, rule, lead);
       return;
     }
 
@@ -57,10 +58,14 @@ export async function handleMessage(event: MetaMessagingEvent): Promise<void> {
 }
 
 async function handleEmailCollection(
-  senderId: string,
+  event: ZernioMessageData,
+  accountId: string,
   text: string,
   lead: NonNullable<Awaited<ReturnType<typeof getLeadByIgUserId>>>,
 ): Promise<void> {
+  const senderId = event.sender.id;
+  const conversationId = event.conversationId;
+
   if (EMAIL_REGEX.test(text)) {
     // Valid email — save it
     await setLeadEmail(senderId, text);
@@ -69,21 +74,22 @@ async function handleEmailCollection(
     const rule = getKeywordRules().find((r) => r.id === lead.keyword_id);
 
     if (rule?.followUp) {
+      let textToSend = rule.followUp.text;
       if (rule.followUp.type === 'button' && rule.followUp.buttons?.length) {
-        await sendButtonDM(senderId, rule.followUp.text, rule.followUp.buttons);
-      } else {
-        await sendTextDM(senderId, rule.followUp.text);
+        const buttonTexts = rule.followUp.buttons.map((b) => `- ${b.title}`).join('\n');
+        textToSend += '\n\nOpciones:\n' + buttonTexts;
       }
+      await sendTextDM(conversationId, textToSend);
 
       logDM({
         igUserId: senderId,
         direction: 'outbound',
         messageType: 'followup',
         keywordId: rule.id,
-        content: rule.followUp.text,
+        content: textToSend,
       }).catch(() => {});
     } else {
-      await sendTextDM(senderId, 'Genial, ya quedo guardado tu email! Te vamos a enviar info pronto.');
+      await sendTextDM(conversationId, 'Genial, ya quedo guardado tu email! Te vamos a enviar info pronto.');
     }
 
     // Send emails if Resend is configured
@@ -106,15 +112,19 @@ async function handleEmailCollection(
     logger.info({ senderId, email: text, keywordId: lead.keyword_id }, 'Email collected, followUp sent');
   } else {
     // Not a valid email — ask again
-    await sendTextDM(senderId, 'Hmm, no parece un email valido. Podes enviarmelo de nuevo?');
+    await sendTextDM(conversationId, 'Hmm, no parece un email valido. Podes enviarmelo de nuevo?');
   }
 }
 
 async function handleKeywordDM(
-  senderId: string,
+  event: ZernioMessageData,
+  accountId: string,
   rule: NonNullable<ReturnType<typeof matchKeyword>>,
   existingLead: Awaited<ReturnType<typeof getLeadByIgUserId>>,
 ): Promise<void> {
+  const senderId = event.sender.id;
+  const conversationId = event.conversationId;
+
   // Rate limit & cooldown checks
   if (isRateLimited(senderId)) {
     logger.warn({ senderId }, 'User rate limited (max DMs/hour)');
@@ -129,10 +139,10 @@ async function handleKeywordDM(
   let username = existingLead?.ig_username;
   if (!username) {
     try {
-      const profile = await getUserProfile(senderId);
+      const profile = await getUserProfile(accountId, senderId);
       username = profile.username;
     } catch {
-      username = 'amigo';
+      username = event.sender.username || 'amigo';
     }
   }
 
@@ -149,12 +159,12 @@ async function handleKeywordDM(
   }
 
   // Send keyword response
-  const renderedText = renderTemplate(rule.response.text, { username });
+  let textToSend = renderTemplate(rule.response.text, { username });
   if (rule.response.type === 'button' && rule.response.buttons?.length) {
-    await sendButtonDM(senderId, renderedText, rule.response.buttons);
-  } else {
-    await sendTextDM(senderId, renderedText);
+    const buttonTexts = rule.response.buttons.map((b) => `- ${b.title}`).join('\n');
+    textToSend += '\n\nOpciones:\n' + buttonTexts;
   }
+  await sendTextDM(conversationId, textToSend);
 
   // Record trigger & log
   recordTrigger(senderId, rule.id);
@@ -163,11 +173,8 @@ async function handleKeywordDM(
     direction: 'outbound',
     messageType: rule.response.type,
     keywordId: rule.id,
-    content: renderedText,
+    content: textToSend,
   }).catch((err) => logger.error({ err }, 'Failed to log DM'));
-
-  // If askEmail, the response already has a postback button.
-  // The postback handler will take over when the user clicks it.
 
   logger.info({ senderId, ruleId: rule.id }, 'Keyword DM sent successfully');
 }
