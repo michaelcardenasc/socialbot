@@ -12,9 +12,11 @@
     "import:csv": "tsx src/scripts/import-csv.ts"
   },
   "dependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/node": "^22.13.5",
     "@zernio/node": "^0.2.612",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "pino": "^9.6.0",

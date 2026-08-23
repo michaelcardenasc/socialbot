@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-gray-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SocialBot — Panel de Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .card { background: #1f2937; border: 1px solid #374151; border-radius: 12px; }
+    .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 8px; color: #9ca3af; cursor: pointer; transition: all 0.2s; font-size: 14px; font-weight: 500; }
+    .sidebar-link:hover { background: #374151; color: #f9fafb; }
+    .sidebar-link.active { background: #4f46e5; color: white; }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+    .badge-green { background: #065f46; color: #6ee7b7; }
+    .badge-red { background: #7f1d1d; color: #fca5a5; }
+    .badge-blue { background: #1e3a5f; color: #93c5fd; }
+    .badge-yellow { background: #78350f; color: #fcd34d; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: none; }
+    .btn-primary { background: #4f46e5; color: white; }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-ghost { background: #374151; color: #d1d5db; }
+    .btn-ghost:hover { background: #4b5563; }
+    .btn-success { background: #065f46; color: #6ee7b7; }
+    .input { width: 100%; background: #111827; border: 1px solid #374151; color: #f9fafb; padding: 8px 12px; border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.2s; }
+    .input:focus { border-color: #4f46e5; }
+    .label { display: block; font-size: 13px; font-weight: 500; color: #9ca3af; margin-bottom: 4px; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal { background: #1f2937; border: 1px solid #374151; border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #111827; } ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    textarea.input { resize: vertical; min-height: 80px; }
+    .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; inset: 0; background-color: #374151; border-radius: 24px; transition: 0.2s; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: 0.2s; }
+    input:checked + .slider { background-color: #4f46e5; }
+    input:checked + .slider:before { transform: translateX(20px); }
+  </style>
+</head>
+<body class="h-full bg-gray-950 text-white">
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+// ─── API Client ───────────────────────────────────────────────────────────────
+const api = {
+  key: localStorage.getItem('adminKey') || '',
+  headers() { return { 'Content-Type': 'application/json', 'x-admin-key': this.key }; },
+  async get(path) {
+    const r = await fetch('/admin' + path, { headers: this.headers() });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async post(path, body) {
+    const r = await fetch('/admin' + path, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async put(path, body) {
+    const r = await fetch('/admin' + path, { method: 'PUT', headers: this.headers(), body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async patch(path) {
+    const r = await fetch('/admin' + path, { method: 'PATCH', headers: this.headers() });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+  async del(path) {
+    const r = await fetch('/admin' + path, { method: 'DELETE', headers: this.headers() });
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  },
+};
+
+// ─── Login Screen ─────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [key, setKey] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const r = await fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      });
+      const data = await r.json();
+      if (data.success) {
+        localStorage.setItem('adminKey', key);
+        api.key = key;
+        onLogin();
+      } else {
+        setError('Clave incorrecta. Inténtalo de nuevo.');
+      }
+    } catch {
+      setError('Error de conexión');
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-950">
+      <div className="card p-8 w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="text-5xl mb-4">🤖</div>
+          <h1 className="text-2xl font-bold text-white">SocialBot Admin</h1>
+          <p className="text-gray-400 text-sm mt-1">Panel de administración</p>
+        </div>
+        <form onSubmit={handleLogin}>
+          <div className="mb-4">
+            <label className="label">Clave de administrador</label>
+            <input
+              type="password"
+              className="input"
+              placeholder="Ingresa tu ADMIN_API_KEY"
+              value={key}
+              onChange={e => setKey(e.target.value)}
+              required
+            />
+          </div>
+          {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+          <button type="submit" className="btn btn-primary w-full justify-center" disabled={loading}>
+            {loading ? '⏳ Verificando...' : '🔐 Ingresar'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+function StatCard({ icon, label, value, color }) {
+  return (
+    <div className="card p-6 flex items-center gap-4">
+      <div className={`text-4xl p-3 rounded-xl ${color}`}>{icon}</div>
+      <div>
+        <p className="text-gray-400 text-sm">{label}</p>
+        <p className="text-3xl font-bold text-white">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Home Tab ─────────────────────────────────────────────────────────────────
+function HomeTab() {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/api/stats').then(setStats).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">⏳ Cargando estadísticas...</div>;
+  if (!stats) return <div className="text-red-400">Error al cargar estadísticas</div>;
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold mb-6">📊 Panel Principal</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard icon="👥" label="Leads Captados" value={stats.totalLeads} color="bg-purple-900/50" />
+        <StatCard icon="📨" label="DMs Enviados" value={stats.totalDMs} color="bg-blue-900/50" />
+        <StatCard icon="🔥" label="DMs Hoy" value={stats.dmsSentToday} color="bg-orange-900/50" />
+        <StatCard icon="🔑" label="Keywords Activas" value={stats.activeKeywords} color="bg-green-900/50" />
+      </div>
+      <div className="card p-6">
+        <h3 className="font-semibold text-lg mb-3">Estado del Servidor</h3>
+        <div className="flex items-center gap-3">
+          <span className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></span>
+          <span className="text-green-400 font-semibold">En línea</span>
+          <span className="text-gray-500 text-sm ml-4">Uptime: {Math.floor(stats.serverUptime / 60)} minutos</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Keyword Modal ─────────────────────────────────────────────────────────────
+function KeywordModal({ rule, onClose, onSaved }) {
+  const isEdit = !!rule;
+  const [form, setForm] = useState(rule ? {
+    id: rule.id,
+    keyword: rule.keyword,
+    aliases: (rule.aliases || []).join(', '),
+    matchType: rule.matchType || 'contains',
+    priority: rule.priority || 10,
+    enabled: rule.enabled !== false,
+    cooldownMinutes: rule.cooldownMinutes || 60,
+    platforms: (rule.platforms || ['instagram','facebook']).join(', '),
+    commentReply: rule.commentReply || '',
+    responseText: rule.response?.sequence?.[0]?.text || rule.response?.text || '',
+    step2Text: rule.response?.sequence?.[1]?.text || '',
+    step2Delay: rule.response?.sequence?.[1]?.delay || 2,
+  } : {
+    id: '', keyword: '', aliases: '', matchType: 'contains',
+    priority: 10, enabled: true, cooldownMinutes: 60,
+    platforms: 'instagram, facebook',
+    commentReply: '', responseText: '', step2Text: '', step2Delay: 2,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const set = (field, val) => setForm(f => ({ ...f, [field]: val }));
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      const sequence = [{ delay: 0, text: form.responseText }];
+      if (form.step2Text) sequence.push({ delay: Number(form.step2Delay), text: form.step2Text });
+
+      const payload = {
+        id: form.id.replace(/\s+/g, '_').toLowerCase() || Date.now().toString(),
+        keyword: form.keyword.trim(),
+        aliases: form.aliases.split(',').map(s => s.trim()).filter(Boolean),
+        matchType: form.matchType,
+        priority: Number(form.priority),
+        enabled: form.enabled,
+        cooldownMinutes: Number(form.cooldownMinutes),
+        platforms: form.platforms.split(',').map(s => s.trim()).filter(Boolean),
+        commentReply: form.commentReply || undefined,
+        response: { type: 'sequence', text: '', sequence },
+      };
+
+      if (isEdit) {
+        await api.put(`/api/keywords/${rule.id}`, payload);
+      } else {
+        await api.post('/api/keywords', payload);
+      }
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(String(e));
+    }
+    setSaving(false);
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold">{isEdit ? '✏️ Editar Keyword' : '➕ Nueva Keyword'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">✕</button>
+        </div>
+        <div className="space-y-4">
+          {!isEdit && (
+            <div>
+              <label className="label">ID Único (sin espacios) *</label>
+              <input className="input" value={form.id} onChange={e => set('id', e.target.value)} placeholder="ej: bienvenida_curso" />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Palabra clave principal *</label>
+              <input className="input" value={form.keyword} onChange={e => set('keyword', e.target.value)} placeholder="ej: hola" />
+            </div>
+            <div>
+              <label className="label">Tipo de coincidencia</label>
+              <select className="input" value={form.matchType} onChange={e => set('matchType', e.target.value)}>
+                <option value="contains">Contiene</option>
+                <option value="exact">Exacto</option>
+                <option value="word_boundary">Palabra completa</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Alias / variaciones (separados por coma)</label>
+            <input className="input" value={form.aliases} onChange={e => set('aliases', e.target.value)} placeholder="ej: buenas, buenos días, saludos" />
+          </div>
+          <div>
+            <label className="label">Mensaje de respuesta (Paso 1) *</label>
+            <textarea className="input" rows={4} value={form.responseText} onChange={e => set('responseText', e.target.value)}
+              placeholder="¡Hola {{username}}! 👋 ¿En qué te puedo ayudar?" />
+            <p className="text-xs text-gray-500 mt-1">Usa <code className="bg-gray-800 px-1 rounded">{"{{username}}"}</code> para el nombre del usuario</p>
+          </div>
+          <div>
+            <label className="label">Mensaje adicional (Paso 2 — opcional, se envía con delay)</label>
+            <textarea className="input" rows={3} value={form.step2Text} onChange={e => set('step2Text', e.target.value)}
+              placeholder="Segundo mensaje con link o más información..." />
+            {form.step2Text && (
+              <div className="mt-2">
+                <label className="label">Delay del Paso 2 (segundos)</label>
+                <input type="number" className="input" value={form.step2Delay} onChange={e => set('step2Delay', e.target.value)} min={1} max={30} />
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="label">Respuesta pública al comentario (opcional)</label>
+            <input className="input" value={form.commentReply} onChange={e => set('commentReply', e.target.value)} placeholder="ej: ¡Revisa tus DMs! 📩" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="label">Prioridad</label>
+              <input type="number" className="input" value={form.priority} onChange={e => set('priority', e.target.value)} min={1} max={100} />
+            </div>
+            <div>
+              <label className="label">Cooldown (minutos)</label>
+              <input type="number" className="input" value={form.cooldownMinutes} onChange={e => set('cooldownMinutes', e.target.value)} min={1} />
+            </div>
+            <div>
+              <label className="label">Plataformas</label>
+              <input className="input" value={form.platforms} onChange={e => set('platforms', e.target.value)} placeholder="instagram, facebook" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="toggle">
+              <input type="checkbox" checked={form.enabled} onChange={e => set('enabled', e.target.checked)} />
+              <span className="slider"></span>
+            </label>
+            <span className="text-sm text-gray-300">Activa</span>
+          </div>
+        </div>
+        {error && <p className="text-red-400 text-sm mt-4">{error}</p>}
+        <div className="flex gap-3 mt-6">
+          <button className="btn btn-ghost flex-1 justify-center" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-primary flex-1 justify-center" onClick={handleSave} disabled={saving}>
+            {saving ? '⏳ Guardando...' : (isEdit ? '💾 Guardar Cambios' : '✅ Crear Keyword')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Keywords Tab ──────────────────────────────────────────────────────────────
+function KeywordsTab() {
+  const [keywords, setKeywords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null); // null | 'new' | {rule}
+  const [syncing, setSyncing] = useState(false);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    api.get('/api/keywords').then(setKeywords).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  async function toggleKeyword(id) {
+    await api.patch(`/api/keywords/${id}/toggle`);
+    reload();
+  }
+
+  async function deleteKeyword(id) {
+    if (!confirm('¿Eliminar esta keyword? No se puede deshacer.')) return;
+    await api.del(`/api/keywords/${id}`);
+    reload();
+  }
+
+  async function syncFromJson() {
+    setSyncing(true);
+    try {
+      const r = await api.post('/api/keywords/sync', {});
+      alert(`✅ Sincronizadas ${r.synced} keywords desde keywords.json`);
+      reload();
+    } catch (e) {
+      alert('Error: ' + e);
+    }
+    setSyncing(false);
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">🔑 Palabras Clave</h2>
+        <div className="flex gap-2">
+          <button className="btn btn-ghost" onClick={syncFromJson} disabled={syncing}>
+            {syncing ? '⏳' : '🔄'} Sincronizar JSON
+          </button>
+          <button className="btn btn-primary" onClick={() => setModal('new')}>➕ Nueva Keyword</button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-gray-400 text-center py-12">⏳ Cargando...</div>
+      ) : keywords.length === 0 ? (
+        <div className="card p-12 text-center">
+          <div className="text-5xl mb-4">🔑</div>
+          <p className="text-gray-400 mb-4">No hay keywords configuradas.</p>
+          <div className="flex gap-3 justify-center">
+            <button className="btn btn-ghost" onClick={syncFromJson}>🔄 Sincronizar desde keywords.json</button>
+            <button className="btn btn-primary" onClick={() => setModal('new')}>➕ Crear primera keyword</button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {keywords.map(kw => (
+            <div key={kw.id} className="card p-4 flex items-start gap-4">
+              <label className="toggle mt-1 flex-shrink-0">
+                <input type="checkbox" checked={kw.enabled} onChange={() => toggleKeyword(kw.id)} />
+                <span className="slider"></span>
+              </label>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-purple-300 font-semibold">"{kw.keyword}"</span>
+                  <span className={`badge ${kw.enabled ? 'badge-green' : 'badge-red'}`}>
+                    {kw.enabled ? 'Activa' : 'Inactiva'}
+                  </span>
+                  <span className="badge badge-blue">{kw.matchType}</span>
+                  {(kw.platforms || []).map(p => (
+                    <span key={p} className="badge badge-yellow">{p}</span>
+                  ))}
+                  <span className="text-gray-500 text-xs">prioridad: {kw.priority} • cooldown: {kw.cooldownMinutes}min</span>
+                </div>
+                {kw.aliases?.length > 0 && (
+                  <p className="text-gray-500 text-xs mt-1">Alias: {kw.aliases.join(', ')}</p>
+                )}
+                <p className="text-gray-300 text-sm mt-2 truncate">
+                  💬 {kw.response?.sequence?.[0]?.text?.slice(0, 100) || kw.response?.text?.slice(0, 100) || '(sin texto)'}...
+                </p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button className="btn btn-ghost" onClick={() => setModal(kw)}>✏️ Editar</button>
+                <button className="btn btn-danger" onClick={() => deleteKeyword(kw.id)}>🗑️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modal && (
+        <KeywordModal
+          rule={modal === 'new' ? null : modal}
+          onClose={() => setModal(null)}
+          onSaved={reload}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Leads Tab ────────────────────────────────────────────────────────────────
+function LeadsTab() {
+  const [leads, setLeads] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState({ status: '', platform: '' });
+
+  function reload() {
+    setLoading(true);
+    const q = new URLSearchParams();
+    if (filter.status) q.set('status', filter.status);
+    if (filter.platform) q.set('platform', filter.platform);
+    api.get('/api/leads?' + q).then(d => { setLeads(d.leads); setTotal(d.total); }).finally(() => setLoading(false));
+  }
+
+  useEffect(() => { reload(); }, [filter]);
+
+  function exportCsv() {
+    const headers = ['ID','Usuario','Email','Plataforma','Estado','Keyword','Fecha'];
+    const rows = leads.map(l => [l.id, l.ig_username, l.email || '', l.platform, l.status, l.keyword_id || '', l.created_at]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'leads.csv'; a.click();
+  }
+
+  const statusColors = { new: 'badge-blue', email_collecting: 'badge-yellow', email_collected: 'badge-green', subscribed: 'badge-green' };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">👥 Leads Captados <span className="text-gray-400 text-lg">({total})</span></h2>
+        <button className="btn btn-ghost" onClick={exportCsv}>📥 Exportar CSV</button>
+      </div>
+      <div className="flex gap-3 mb-4">
+        <select className="input w-48" value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}>
+          <option value="">Todos los estados</option>
+          <option value="new">Nuevo</option>
+          <option value="email_collecting">Recopilando email</option>
+          <option value="email_collected">Email recopilado</option>
+          <option value="subscribed">Suscrito</option>
+        </select>
+        <select className="input w-48" value={filter.platform} onChange={e => setFilter(f => ({ ...f, platform: e.target.value }))}>
+          <option value="">Todas las plataformas</option>
+          <option value="instagram">Instagram</option>
+          <option value="facebook">Facebook</option>
+        </select>
+      </div>
+      {loading ? (
+        <div className="text-gray-400 text-center py-12">⏳ Cargando...</div>
+      ) : leads.length === 0 ? (
+        <div className="card p-12 text-center">
+          <div className="text-5xl mb-4">👥</div>
+          <p className="text-gray-400">No hay leads aún. Los leads aparecen cuando alguien activa una keyword del bot.</p>
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-700">
+              <tr className="text-gray-400 text-left">
+                <th className="p-3">Usuario</th>
+                <th className="p-3">Email</th>
+                <th className="p-3">Plataforma</th>
+                <th className="p-3">Estado</th>
+                <th className="p-3">Keyword</th>
+                <th className="p-3">Fecha</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leads.map((l, i) => (
+                <tr key={l.id} className={`border-b border-gray-800 ${i % 2 === 0 ? 'bg-gray-900/30' : ''}`}>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-purple-800 flex items-center justify-center text-xs font-bold">
+                        {(l.ig_username || '?')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium">@{l.ig_username}</p>
+                        {l.name && <p className="text-gray-500 text-xs">{l.name}</p>}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-3 text-gray-300">{l.email || <span className="text-gray-600">—</span>}</td>
+                  <td className="p-3"><span className="badge badge-blue">{l.platform}</span></td>
+                  <td className="p-3"><span className={`badge ${statusColors[l.status] || 'badge-blue'}`}>{l.status}</span></td>
+                  <td className="p-3 text-gray-400">{l.keyword_id || '—'}</td>
+                  <td className="p-3 text-gray-500 text-xs">{new Date(l.created_at).toLocaleString('es')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DM Logs Tab ──────────────────────────────────────────────────────────────
+function DmLogsTab() {
+  const [logs, setLogs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+
+  function reload() {
+    setLoading(true);
+    const q = filter ? `?direction=${filter}` : '';
+    api.get('/api/dm-logs' + q).then(d => { setLogs(d.logs); setTotal(d.total); }).finally(() => setLoading(false));
+  }
+
+  useEffect(() => { reload(); }, [filter]);
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">📨 Historial de Mensajes <span className="text-gray-400 text-lg">({total})</span></h2>
+        <select className="input w-48" value={filter} onChange={e => setFilter(e.target.value)}>
+          <option value="">Todos</option>
+          <option value="outbound">Enviados</option>
+          <option value="inbound">Recibidos</option>
+        </select>
+      </div>
+      {loading ? (
+        <div className="text-gray-400 text-center py-12">⏳ Cargando...</div>
+      ) : logs.length === 0 ? (
+        <div className="card p-12 text-center">
+          <div className="text-5xl mb-4">📭</div>
+          <p className="text-gray-400">No hay mensajes en el historial aún.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {logs.map(log => (
+            <div key={log.id} className="card p-4 flex gap-4 items-start">
+              <span className={`badge flex-shrink-0 mt-1 ${log.direction === 'outbound' ? 'badge-green' : 'badge-blue'}`}>
+                {log.direction === 'outbound' ? '📤 Enviado' : '📥 Recibido'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium text-sm">@{log.ig_user_id}</span>
+                  {log.keyword_id && <span className="badge badge-yellow text-xs">{log.keyword_id}</span>}
+                  <span className="text-gray-600 text-xs ml-auto">{new Date(log.created_at).toLocaleString('es')}</span>
+                </div>
+                <p className="text-gray-300 text-sm whitespace-pre-line">{log.content}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── App Shell ─────────────────────────────────────────────────────────────────
+function App() {
+  const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem('adminKey'));
+  const [tab, setTab] = useState('home');
+
+  if (!loggedIn) {
+    return <LoginScreen onLogin={() => { api.key = localStorage.getItem('adminKey'); setLoggedIn(true); }} />;
+  }
+
+  function logout() {
+    localStorage.removeItem('adminKey');
+    api.key = '';
+    setLoggedIn(false);
+  }
+
+  const navItems = [
+    { id: 'home', icon: '📊', label: 'Panel Principal' },
+    { id: 'keywords', icon: '🔑', label: 'Palabras Clave' },
+    { id: 'leads', icon: '👥', label: 'Leads' },
+    { id: 'logs', icon: '📨', label: 'Historial DMs' },
+  ];
+
+  return (
+    <div className="flex h-screen bg-gray-950 overflow-hidden">
+      {/* Sidebar */}
+      <div className="w-56 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col">
+        <div className="p-4 border-b border-gray-800">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🤖</span>
+            <div>
+              <p className="font-bold text-sm text-white">SocialBot</p>
+              <p className="text-xs text-gray-500">Admin Panel</p>
+            </div>
+          </div>
+        </div>
+        <nav className="flex-1 p-3 space-y-1">
+          {navItems.map(item => (
+            <div
+              key={item.id}
+              className={`sidebar-link ${tab === item.id ? 'active' : ''}`}
+              onClick={() => setTab(item.id)}
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </nav>
+        <div className="p-3 border-t border-gray-800">
+          <button className="sidebar-link w-full text-red-400 hover:text-red-300 hover:bg-red-900/20" onClick={logout}>
+            🚪 <span>Cerrar sesión</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-6 max-w-6xl mx-auto">
+          {tab === 'home' && <HomeTab />}
+          {tab === 'keywords' && <KeywordsTab />}
+          {tab === 'leads' && <LeadsTab />}
+          {tab === 'logs' && <DmLogsTab />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

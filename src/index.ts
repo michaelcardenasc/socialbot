@@ -1,17 +1,17 @@
 import express from 'express';
+import cookieParser from 'cookie-parser';
+import { join } from 'node:path';
 import type { Request, Response } from 'express';
 import { loadEnv } from './config/env.js';
 import { logger } from './utils/logger.js';
-import { loadKeywordRules } from './services/keyword.service.js';
+import { loadKeywordRulesFromDb } from './services/keyword.service.js';
 import { initDb } from './services/db.js';
 import { startEmailReminder } from './services/reminder.service.js';
 import { webhookRouter } from './webhooks/router.js';
+import { adminRouter } from './admin/router.js';
 
 // Load and validate env vars
 const env = loadEnv();
-
-// Load keyword rules
-loadKeywordRules();
 
 const app = express();
 
@@ -23,6 +23,7 @@ app.use(
     },
   }),
 );
+app.use(cookieParser());
 
 // Health endpoint
 app.get('/health', (_req: Request, res: Response) => {
@@ -36,9 +37,20 @@ app.get('/health', (_req: Request, res: Response) => {
 // Webhook routes
 app.use('/webhook', webhookRouter);
 
-// Initialize database and start server
+// Admin API routes
+app.use('/admin', adminRouter);
+
+// Admin Dashboard SPA — serve static HTML (public/admin folder at project root)
+const publicDir = join(process.cwd(), 'public', 'admin');
+app.use('/dashboard', express.static(publicDir));
+app.get('/dashboard', (_req: Request, res: Response) => {
+  res.sendFile(join(publicDir, 'index.html'));
+});
+
+// Initialize database, load rules, start server
 initDb()
-  .then(() => {
+  .then(async () => {
+    await loadKeywordRulesFromDb();
     startEmailReminder();
     app.listen(env.PORT, '0.0.0.0', () => {
       logger.info({ port: env.PORT, env: env.NODE_ENV }, 'SocialBot server started');
