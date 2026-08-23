@@ -1,8 +1,8 @@
 import type { ZernioCommentData } from '../types/zernio.types.js';
 import { matchKeyword } from '../services/keyword.service.js';
 import { isOnCooldown, isRateLimited, recordTrigger } from '../services/cooldown.service.js';
-import { initiateDM, sendTextDM, replyToComment } from '../services/zernio.service.js';
-import { renderTemplate } from '../utils/templates.js';
+import { sendTextDM, replyToComment } from '../services/zernio.service.js';
+import { executeResponse } from '../services/sequence.service.js';
 import { logger } from '../utils/logger.js';
 import { upsertLead } from '../services/lead.service.js';
 import { logDM } from '../services/dmlog.service.js';
@@ -17,19 +17,24 @@ export function maskEmail(email: string): string {
 export async function handleComment(comment: ZernioCommentData, accountId: string): Promise<void> {
   const { sender, text, commentId } = comment;
   const userId = sender.id;
-  const username = sender.username;
+  const username = sender.username || 'amigo';
 
-  logger.info({ userId, username, text, commentId, accountId }, 'Processing comment');
+  logger.info({ userId, username, text, commentId, accountId }, '💬 Processing comment');
+
+  if (!text || !text.trim()) {
+    logger.debug('Empty comment text, skipping');
+    return;
+  }
 
   // 1. Match against keyword rules
   const rule = matchKeyword(text);
 
   if (!rule) {
-    logger.debug({ text }, 'No keyword match');
+    logger.debug({ text }, 'No keyword match for comment');
     return;
   }
 
-  logger.info({ ruleId: rule.id, keyword: rule.keyword }, 'Keyword matched');
+  logger.info({ ruleId: rule.id, keyword: rule.keyword, username }, '🎯 Keyword matched from comment');
 
   // 2. Check rate limit
   if (isRateLimited(userId)) {
@@ -50,66 +55,54 @@ export async function handleComment(comment: ZernioCommentData, accountId: strin
       igUsername: username,
       source: 'comment',
       keywordId: rule.id,
+      conversationId: userId,
     });
   } catch (err) {
     logger.error({ err, userId }, 'Failed to upsert lead (continuing with DM)');
   }
 
-  // 5. Render template
-  const vars = { username };
-  const renderedText = renderTemplate(rule.response.text, vars);
+  // 5. Send DM response (supports text, media, sequence, menu)
+  const vars = {
+    username,
+    name: sender.name || username,
+  };
 
-  // 6. Send DM (initiate from comment)
   try {
-    // For now, we only send text DMs since we are using Zernio.
-    let textToSend = renderedText;
-    if (rule.response.type === 'button' && rule.response.buttons?.length) {
-      // Append button options as text instructions for now
-      const buttonTexts = rule.response.buttons.map((b) => `- ${b.title}`).join('\n');
-      textToSend += '\n\nOpciones:\n' + buttonTexts;
-    }
-
-    await initiateDM(accountId, userId, textToSend);
-
-    // Try to reply publicly
-    try {
-      await replyToComment(accountId, commentId, '¡Revisa tus DMs! 📩');
-    } catch (replyErr) {
-      logger.error({ replyErr, commentId }, 'Failed to reply to comment');
-    }
-
-    // 7. Record trigger & log DM
-    recordTrigger(userId, rule.id);
-    logDM({
-      igUserId: userId,
-      direction: 'outbound',
-      messageType: rule.response.type,
+    // Send full response / sequence to the user via DM
+    await executeResponse(userId, rule.response, vars, {
       keywordId: rule.id,
-      content: textToSend,
-    }).catch((err) => logger.error({ err }, 'Failed to log DM'));
+      igUserId: userId,
+    });
+
+    // 6. Reply publicly to comment if commentId exists
+    if (commentId) {
+      const publicReply = rule.commentReply || '¡Hola! Te envié un mensaje directo 📩';
+      try {
+        await replyToComment(accountId, commentId, publicReply);
+        logger.info({ commentId, reply: publicReply }, 'Public comment reply sent');
+      } catch (replyErr) {
+        logger.error({ replyErr, commentId }, 'Failed to reply publicly to comment');
+      }
+    }
+
+    // 7. Record trigger
+    recordTrigger(userId, rule.id);
 
     logger.info(
       { userId, username, ruleId: rule.id, commentId },
-      'DM sent successfully',
+      '✅ Comment handled and DM sent successfully',
     );
   } catch (err) {
-    logger.error({ err, userId, ruleId: rule.id }, 'Failed to send DM');
+    logger.error({ err, userId, ruleId: rule.id }, 'Failed to send DM for comment');
   }
 }
 
 export async function sendFollowUp(conversationId: string, rule: ReturnType<typeof matchKeyword>): Promise<void> {
   if (!rule?.followUp) return;
 
-  let textToSend = rule.followUp.text;
-  if (rule.followUp.type === 'button' && rule.followUp.buttons?.length) {
-    const buttonTexts = rule.followUp.buttons.map((b) => `- ${b.title}`).join('\n');
-    textToSend += '\n\nOpciones:\n' + buttonTexts;
-  }
-
+  const textToSend = rule.followUp.text;
   await sendTextDM(conversationId, textToSend);
 
-  // We might not have igUserId directly here easily for logDM unless we change logDM signature or lookup
-  // But for the scope of this migration, keeping it simple as we don't have userId. We'll pass conversationId as igUserId for now.
   logDM({
     igUserId: conversationId,
     direction: 'outbound',

@@ -25,15 +25,20 @@ export function parseWebhookPayload(payload: any): ParsedZernioEvent[] {
   // ── COMMENT events ──────────────────────────────────────────────────────────
   if (eventName.includes('comment')) {
     const d = payload.data || payload.comment || payload;
+    const sender = {
+      id: d.sender?.id || d.from?.id || d.user_id || d.participantId || d.userId || payload.from?.id || payload.sender?.id || '',
+      username: d.sender?.username || d.from?.username || d.participantUsername || d.username || payload.from?.username || payload.sender?.username || 'amigo',
+      name: d.sender?.name || d.from?.name || d.participantName || d.name || payload.from?.name || payload.sender?.name,
+    };
+    const commentId = d.commentId || d.comment_id || d.id || payload.id || '';
+    const postId = d.postId || d.post_id || d.media_id || payload.postId || '';
+    const text = typeof d.text === 'string' ? d.text : (typeof d.message === 'string' ? d.message : (typeof payload.message === 'string' ? payload.message : (typeof payload.text === 'string' ? payload.text : (d.content || ''))));
+
     const commentData: ZernioCommentData = {
-      commentId: d.commentId || d.comment_id || d.id || '',
-      postId: d.postId || d.post_id || d.media_id || '',
-      sender: {
-        id: d.sender?.id || d.from?.id || d.user_id || d.participantId || '',
-        username: d.sender?.username || d.from?.username || d.participantUsername || d.username || 'amigo',
-        name: d.sender?.name || d.from?.name || d.participantName || d.name,
-      },
-      text: d.text || d.message || d.content || '',
+      commentId,
+      postId,
+      sender,
+      text,
       parentCommentId: d.parentCommentId || d.parent_id,
     };
     events.push({ type: 'comment', platform, data: commentData, accountId });

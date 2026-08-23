@@ -165,10 +165,10 @@ export async function replyToComment(
 ): Promise<ZernioCommentReplyResponse> {
   logger.debug({ accountId, commentId }, 'Replying to comment via Zernio');
   return zernioFetch<ZernioCommentReplyResponse>(
-    `/comments/${commentId}/replies`,
+    '/inbox/comments/reply',
     {
       method: 'POST',
-      body: JSON.stringify({ accountId, text }),
+      body: JSON.stringify({ commentId, accountId, message: text }),
     },
   );
 }
