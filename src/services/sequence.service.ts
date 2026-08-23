@@ -22,13 +22,20 @@ function formatButtonsAsText(buttons: MessageButton[]): string {
  */
 export async function executeSequence(
   conversationId: string,
-  steps: SequenceStep[],
+  rawSteps: SequenceStep[],
   vars: Record<string, string>,
   options?: { keywordId?: string; igUserId?: string; accountId?: string },
 ): Promise<void> {
   const keywordId = options?.keywordId;
   const igUserId = options?.igUserId ?? conversationId;
   const accountId = options?.accountId;
+
+  const steps: SequenceStep[] = typeof rawSteps === 'string' ? JSON.parse(rawSteps) : rawSteps;
+
+  if (!steps || !Array.isArray(steps)) {
+    logger.warn({ steps, conversationId }, 'Invalid sequence steps format');
+    return;
+  }
 
   logger.info({ conversationId, steps: steps.length, keywordId, accountId }, 'Executing sequence');
 
@@ -93,13 +100,20 @@ export async function executeSequence(
  */
 export async function executeResponse(
   conversationId: string,
-  response: KeywordResponse,
+  rawResponse: KeywordResponse,
   vars: Record<string, string>,
   options?: { keywordId?: string; igUserId?: string; accountId?: string },
 ): Promise<void> {
   const keywordId = options?.keywordId;
   const igUserId = options?.igUserId ?? conversationId;
   const accountId = options?.accountId;
+
+  const response: KeywordResponse = typeof rawResponse === 'string' ? JSON.parse(rawResponse) : rawResponse;
+
+  if (!response || !response.type) {
+    logger.warn({ rawResponse, conversationId }, 'Invalid response format in executeResponse');
+    return;
+  }
 
   logger.info({ conversationId, type: response.type, keywordId, accountId }, 'Executing response');
 
@@ -160,7 +174,7 @@ export async function executeResponse(
         break;
       }
       default: {
-        logger.warn({ type: response.type }, 'Unknown keyword response type');
+        logger.warn({ type: (response as any).type }, 'Unknown keyword response type');
       }
     }
   } catch (error) {

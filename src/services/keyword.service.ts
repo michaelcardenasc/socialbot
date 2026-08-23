@@ -6,15 +6,27 @@ import { getDb } from './db.js';
 
 let rules: KeywordRule[] = [];
 
+function safeParse<T>(val: any, fallback: T): T {
+  if (!val) return fallback;
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return fallback;
+    }
+  }
+  return val;
+}
+
 /** Load keyword rules from DB; seed from keywords.json if DB is empty */
 export async function loadKeywordRulesFromDb(): Promise<KeywordRule[]> {
   try {
     const db = getDb();
     let rows = await db<{
-      id: string; keyword: string; aliases: string[]; match_type: string;
+      id: string; keyword: string; aliases: any; match_type: string;
       priority: number; enabled: boolean; cooldown_minutes: number;
-      ask_email: boolean; platforms: string[]; comment_reply: string | null;
-      response: unknown; follow_up: unknown | null;
+      ask_email: boolean; platforms: any; comment_reply: string | null;
+      response: any; follow_up: any;
     }[]>`
       SELECT * FROM keyword_rules WHERE enabled = true ORDER BY priority ASC
     `;
@@ -29,12 +41,16 @@ export async function loadKeywordRulesFromDb(): Promise<KeywordRule[]> {
           VALUES (
             ${rule.id}, ${rule.keyword}, ${JSON.stringify(rule.aliases || [])},
             ${rule.matchType || 'contains'}, ${rule.priority || 10}, ${rule.enabled !== false},
-            ${rule.cooldownMinutes || 60}, ${rule.askEmail || false},
+            ${rule.cooldownMinutes || 0}, ${rule.askEmail || false},
             ${JSON.stringify(rule.platforms || ['instagram', 'facebook'])},
             ${rule.commentReply || null}, ${JSON.stringify(rule.response)},
             ${rule.followUp ? JSON.stringify(rule.followUp) : null}
           )
-          ON CONFLICT (id) DO NOTHING
+          ON CONFLICT (id) DO UPDATE SET
+            response = EXCLUDED.response,
+            cooldown_minutes = EXCLUDED.cooldown_minutes,
+            aliases = EXCLUDED.aliases,
+            platforms = EXCLUDED.platforms
         `;
       }
       rows = await db`SELECT * FROM keyword_rules WHERE enabled = true ORDER BY priority ASC`;
@@ -43,16 +59,16 @@ export async function loadKeywordRulesFromDb(): Promise<KeywordRule[]> {
     rules = rows.map((r) => ({
       id: r.id,
       keyword: r.keyword,
-      aliases: r.aliases || [],
+      aliases: safeParse<string[]>(r.aliases, []),
       matchType: r.match_type as KeywordRule['matchType'],
       priority: r.priority,
       enabled: r.enabled,
-      cooldownMinutes: r.cooldown_minutes,
+      cooldownMinutes: r.cooldown_minutes || 0,
       askEmail: r.ask_email,
-      platforms: r.platforms || ['instagram', 'facebook'],
+      platforms: safeParse<string[]>(r.platforms, ['instagram', 'facebook']),
       commentReply: r.comment_reply ?? undefined,
-      response: r.response as KeywordRule['response'],
-      followUp: r.follow_up as KeywordRule['followUp'] ?? undefined,
+      response: safeParse<KeywordRule['response']>(r.response, { type: 'text', text: '' }),
+      followUp: r.follow_up ? safeParse<KeywordRule['followUp']>(r.follow_up, undefined as any) : undefined,
     }));
 
     logger.info({ count: rules.length }, 'Loaded keyword rules from DB');
@@ -88,7 +104,7 @@ export function matchKeyword(commentText: string): KeywordRule | null {
   const text = (commentText || '').trim();
 
   for (const rule of rules) {
-    const keywords = [rule.keyword, ...rule.aliases];
+    const keywords = [rule.keyword, ...(rule.aliases || [])];
     for (const kw of keywords) {
       if (isMatch(text, kw, rule.matchType)) {
         return rule;
