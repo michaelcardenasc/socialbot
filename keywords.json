@@ -1,105 +1,116 @@
 [
   {
-    "id": "infoproducto",
-    "keyword": "info",
-    "aliases": ["infoproducto", "producto", "hola", "buenas", "precio", "comprar", "quiero", "informacion", "interesado"],
+    "id": "bienvenida",
+    "keyword": "hola",
+    "aliases": ["buenas", "buenos", "saludos", "hey", "hello", "ola"],
     "matchType": "contains",
     "priority": 1,
     "enabled": true,
-    "cooldownMinutes": 1,
+    "cooldownMinutes": 1440,
     "askEmail": false,
     "platforms": ["instagram", "facebook"],
-    "commentReply": "¡Te acabo de enviar todos los detalles por DM! 🚀",
+    "commentReply": "¡Hola! Te escribí por DM 🙌",
     "response": {
       "type": "sequence",
-      "text": "Iniciando secuencia",
+      "text": "",
       "sequence": [
         {
           "delay": 0,
-          "text": "¡Hola {{username}}! 🎉 Qué gusto saludarte. Te cuento todo sobre nuestro programa:"
-        },
-        {
-          "delay": 2,
-          "media": {
-            "type": "audio",
-            "url": "https://tu-cdn.com/audio-intro.mp3"
-          }
-        },
-        {
-          "delay": 3,
-          "media": {
-            "type": "image",
-            "url": "https://tu-cdn.com/preview-infoproducto.jpg",
-            "caption": "Mira todo lo que vas a aprender y recibir en el programa."
-          }
-        },
-        {
-          "delay": 2,
-          "text": "Puedes acceder con descuento especial directamente aquí:",
-          "buttons": [
-            {
-              "type": "web_url",
-              "title": "🛒 Comprar con Descuento",
-              "url": "https://tu-sitio.com/checkout/infoproducto"
-            }
-          ]
+          "text": "¡Hola {{username}}! 👋 Bienvenido a *Moisés Origen*.\n\n¿En qué te puedo ayudar hoy? Elige una opción:\n\n📚 *1* — Quiero ver el Curso\n🎁 *2* — Quiero un Recurso Gratis\n💰 *3* — Ver precios e información\n💬 *4* — Hablar con un asesor\n\nResponde con el número de tu opción ✅"
         }
       ]
     }
   },
   {
-    "id": "freebie",
-    "keyword": "regalo",
-    "aliases": ["gratis", "descargar", "guia", "recurso"],
+    "id": "opcion_curso",
+    "keyword": "1",
+    "aliases": ["curso", "clase", "aprender", "quiero el curso", "ver el curso"],
     "matchType": "contains",
     "priority": 2,
     "enabled": true,
-    "cooldownMinutes": 1,
-    "askEmail": true,
+    "cooldownMinutes": 60,
+    "askEmail": false,
     "platforms": ["instagram", "facebook"],
-    "commentReply": "¡Revisa tus DMs para el regalo! 🎁",
     "response": {
-      "type": "button",
-      "text": "¡Hola {{username}}! Qué bueno que quieres el recurso gratuito.",
-      "buttons": [
+      "type": "sequence",
+      "text": "",
+      "sequence": [
         {
-          "type": "postback",
-          "title": "Envíamelo",
-          "payload": "start_email:freebie"
-        }
-      ]
-    },
-    "followUp": {
-      "type": "button",
-      "text": "Aquí tienes el enlace a tu recurso gratuito:",
-      "buttons": [
+          "delay": 0,
+          "text": "¡Excelente elección {{username}}! 🚀\n\nNuestro curso incluye:\n✅ Módulo 1: Fundamentos\n✅ Módulo 2: Práctica Avanzada\n✅ Módulo 3: Implementación Real\n✅ Acceso de por vida\n✅ Soporte personalizado\n\n⏳ El precio normal es $197 USD, pero hoy tienes un *descuento especial*. Mira los detalles aquí:"
+        },
         {
-          "type": "web_url",
-          "title": "Obtener recurso",
-          "url": "https://tu-sitio.com/recurso-gratis"
+          "delay": 2,
+          "text": "🔗 Accede con tu descuento especial:\nhttps://tu-sitio.com/checkout/curso\n\n¿Tienes alguna pregunta? Escríbeme 👇"
         }
       ]
     }
   },
   {
-    "id": "curso",
-    "keyword": "curso",
-    "aliases": ["clase", "aprender", "taller"],
+    "id": "opcion_freebie",
+    "keyword": "2",
+    "aliases": ["regalo", "gratis", "recurso gratis", "quiero el recurso", "freebie"],
     "matchType": "contains",
     "priority": 3,
     "enabled": true,
-    "cooldownMinutes": 1,
+    "cooldownMinutes": 60,
     "askEmail": false,
-    "platforms": ["instagram"],
-    "commentReply": "¡Te mando los detalles del curso al privado! 📚",
+    "platforms": ["instagram", "facebook"],
+    "commentReply": "¡Revisa tus DMs para el regalo! 🎁",
     "response": {
-      "type": "media",
-      "text": "¡Hola {{username}}! Aquí tienes un video sobre el curso.",
-      "media": [
+      "type": "sequence",
+      "text": "",
+      "sequence": [
         {
-          "type": "video",
-          "url": "https://tu-cdn.com/video-curso.mp4",
-          "caption": "Descubre todo lo que aprenderás en el curso."
+          "delay": 0,
+          "text": "¡Genial {{username}}! 🎁 Aquí tienes tu recurso gratuito:\n\n📥 Descárgalo gratis aquí:\nhttps://tu-sitio.com/recurso-gratis\n\n¿Te gustó? Si quieres el programa completo, responde *1* y te cuento más 😊"
+        }
+      ]
+    }
+  },
+  {
+    "id": "opcion_precios",
+    "keyword": "3",
+    "aliases": ["precio", "precios", "costo", "cuanto", "cuánto", "info", "informacion", "información", "quiero info"],
+    "matchType": "contains",
+    "priority": 4,
+    "enabled": true,
+    "cooldownMinutes": 60,
+    "askEmail": false,
+    "platforms": ["instagram", "facebook"],
+    "commentReply": "¡Te mando toda la info al DM! 📩",
+    "response": {
+      "type": "sequence",
+      "text": "",
+      "sequence": [
+        {
+          "delay": 0,
+          "text": "¡Claro {{username}}! Te cuento todo 💡\n\n💎 *Plan Básico* — $97 USD\n   ✅ Acceso completo al curso\n   ✅ 3 meses de soporte\n\n🚀 *Plan Premium* — $197 USD\n   ✅ Todo lo del Plan Básico\n   ✅ Sesiones 1:1 conmigo\n   ✅ Acceso de por vida\n   ✅ Actualizaciones gratis"
+        },
+        {
+          "delay": 2,
+          "text": "🔥 Esta semana hay *50% de descuento* en el Plan Premium.\n\n¿Quieres acceder ahora?\n🔗 https://tu-sitio.com/checkout/premium\n\n¿Tienes alguna duda? Escríbeme 👇"
+        }
+      ]
+    }
+  },
+  {
+    "id": "opcion_asesor",
+    "keyword": "4",
+    "aliases": ["asesor", "hablar", "persona", "humano", "ayuda", "support", "soporte"],
+    "matchType": "contains",
+    "priority": 5,
+    "enabled": true,
+    "cooldownMinutes": 60,
+    "askEmail": false,
+    "platforms": ["instagram", "facebook"],
+    "response": {
+      "type": "sequence",
+      "text": "",
+      "sequence": [
+        {
+          "delay": 0,
+          "text": "¡Por supuesto {{username}}! 🤝 En un momento te atiende nuestro equipo.\n\nMientras tanto, cuéntame:\n¿Cuál es tu principal duda o lo que más te interesa saber?\n\nEscríbelo aquí y te respondo lo más rápido posible 👇"
         }
       ]
     }

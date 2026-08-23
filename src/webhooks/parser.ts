@@ -41,7 +41,7 @@ export function parseWebhookPayload(payload: any): ParsedZernioEvent[] {
   }
 
   // ── CONVERSATION.STARTED (new DM initiated by a user) ───────────────────────
-  if (eventName === 'conversation.started' || eventName.includes('conversation')) {
+  if (eventName === 'conversation.started' || (eventName.includes('conversation') && !eventName.includes('message'))) {
     const conv = payload.conversation || payload.data || payload;
     const sender = {
       id: conv.participantId || conv.participant_id || conv.sender?.id || '',
@@ -50,11 +50,25 @@ export function parseWebhookPayload(payload: any): ParsedZernioEvent[] {
     };
     const conversationId = conv.platformConversationId || conv.id || conv.conversationId || sender.id;
 
+    // Deduplicate — Zernio sometimes fires conversation.started multiple times
+    const dedupeKey = `conv_started_${sender.id}`;
+    if ((global as any).__recentConversations === undefined) (global as any).__recentConversations = new Map();
+    const recent = (global as any).__recentConversations as Map<string, number>;
+    const lastSeen = recent.get(dedupeKey) || 0;
+    const now = Date.now();
+    if (now - lastSeen < 10_000) {
+      logger.info({ senderId: sender.id }, '⏭️ Skipping duplicate conversation.started (within 10s)');
+      return events;
+    }
+    recent.set(dedupeKey, now);
+    // Clean up old entries
+    if (recent.size > 500) recent.clear();
+
     const messageData: ZernioMessageData = {
       conversationId,
       messageId: payload.id || payload.eventId || '',
       sender,
-      text: payload.msg || payload.message || payload.text || payload.lastMessage || '',
+      text: payload.msg || payload.message || payload.text || payload.lastMessage || 'hola',
       attachments: [],
       metadata: {},
     };
