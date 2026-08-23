@@ -7,20 +7,51 @@ import type {
 
 export type { ParsedZernioEvent };
 
-export function parseWebhookPayload(payload: ZernioWebhookPayload): ParsedZernioEvent[] {
+export function parseWebhookPayload(payload: any): ParsedZernioEvent[] {
   const events: ParsedZernioEvent[] = [];
-  const { event, platform, data, accountId } = payload;
+  if (!payload) return events;
 
-  if (event === 'comment.received' || event === 'comment.created') {
+  const eventName = (payload.event || payload.type || '').toLowerCase();
+  const platform = payload.platform || 'instagram';
+  const accountId = payload.accountId || payload.account_id || '';
+  const data = payload.data || payload.body || payload;
+
+  if (eventName.includes('comment')) {
+    const commentData: ZernioCommentData = {
+      commentId: data.commentId || data.comment_id || data.id || '',
+      postId: data.postId || data.post_id || data.media_id || '',
+      sender: {
+        id: data.sender?.id || data.from?.id || data.user_id || '',
+        username: data.sender?.username || data.from?.username || data.username || 'amigo',
+        name: data.sender?.name || data.from?.name || data.name,
+      },
+      text: data.text || data.message || data.content || '',
+      parentCommentId: data.parentCommentId || data.parent_id,
+    };
+
     events.push({
       type: 'comment',
       platform,
-      data: data as ZernioCommentData,
+      data: commentData,
       accountId,
     });
-  } else if (event === 'message.received') {
-    const messageData = data as ZernioMessageData;
-    // Check if the message contains postback payload in metadata
+  } else if (eventName.includes('message')) {
+    const messageData: ZernioMessageData = {
+      conversationId: data.conversationId || data.conversation_id || data.threadId || data.id || data.sender?.id || '',
+      messageId: data.messageId || data.message_id || data.id || '',
+      sender: {
+        id: data.sender?.id || data.from?.id || data.participantId || data.user_id || '',
+        username: data.sender?.username || data.from?.username || data.participantUsername || data.username || 'amigo',
+        name: data.sender?.name || data.from?.name || data.participantName || data.name,
+      },
+      text: data.text || data.message || data.content || '',
+      attachments: data.attachments || [],
+      metadata: data.metadata || {
+        postbackPayload: data.postbackPayload || data.payload,
+        postbackTitle: data.postbackTitle || data.title,
+      },
+    };
+
     if (messageData.metadata?.postbackPayload) {
       events.push({
         type: 'postback',
@@ -36,7 +67,7 @@ export function parseWebhookPayload(payload: ZernioWebhookPayload): ParsedZernio
         accountId,
       });
     }
-  } else if (event === 'reaction.received') {
+  } else if (eventName.includes('reaction')) {
     events.push({
       type: 'reaction',
       platform,
