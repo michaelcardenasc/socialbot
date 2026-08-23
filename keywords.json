@@ -1,22 +1,22 @@
 [
   {
     "id": "infoproducto",
-    "keyword": "infoproducto",
-    "aliases": ["info", "producto"],
+    "keyword": "info",
+    "aliases": ["infoproducto", "producto", "hola", "buenas", "precio", "comprar", "quiero", "informacion", "interesado"],
     "matchType": "contains",
     "priority": 1,
     "enabled": true,
-    "cooldownMinutes": 60,
+    "cooldownMinutes": 1,
     "askEmail": false,
     "platforms": ["instagram", "facebook"],
-    "commentReply": "¡Te acabo de enviar la info por DM! 🚀",
+    "commentReply": "¡Te acabo de enviar todos los detalles por DM! 🚀",
     "response": {
       "type": "sequence",
       "text": "Iniciando secuencia",
       "sequence": [
         {
           "delay": 0,
-          "text": "¡Hola {{username}}! Qué bueno que te interesa nuestro infoproducto."
+          "text": "¡Hola {{username}}! 🎉 Qué gusto saludarte. Te cuento todo sobre nuestro programa:"
         },
         {
           "delay": 2,
@@ -26,20 +26,20 @@
           }
         },
         {
-          "delay": 5,
+          "delay": 3,
           "media": {
             "type": "image",
             "url": "https://tu-cdn.com/preview-infoproducto.jpg",
-            "caption": "Mira un adelanto de lo que aprenderás."
+            "caption": "Mira todo lo que vas a aprender y recibir en el programa."
           }
         },
         {
-          "delay": 3,
-          "text": "Aquí tienes el enlace para acceder con un descuento especial.",
+          "delay": 2,
+          "text": "Puedes acceder con descuento especial directamente aquí:",
           "buttons": [
             {
               "type": "web_url",
-              "title": "Comprar ahora",
+              "title": "🛒 Comprar con Descuento",
               "url": "https://tu-sitio.com/checkout/infoproducto"
             }
           ]
@@ -50,11 +50,11 @@
   {
     "id": "freebie",
     "keyword": "regalo",
-    "aliases": ["gratis", "descargar"],
+    "aliases": ["gratis", "descargar", "guia", "recurso"],
     "matchType": "contains",
     "priority": 2,
     "enabled": true,
-    "cooldownMinutes": 60,
+    "cooldownMinutes": 1,
     "askEmail": true,
     "platforms": ["instagram", "facebook"],
     "commentReply": "¡Revisa tus DMs para el regalo! 🎁",
@@ -71,7 +71,7 @@
     },
     "followUp": {
       "type": "button",
-      "text": "Aquí tienes el enlace a tu recurso gratuito. También te lo envié por correo:",
+      "text": "Aquí tienes el enlace a tu recurso gratuito:",
       "buttons": [
         {
           "type": "web_url",
@@ -84,11 +84,11 @@
   {
     "id": "curso",
     "keyword": "curso",
-    "aliases": ["clase", "aprender"],
+    "aliases": ["clase", "aprender", "taller"],
     "matchType": "contains",
     "priority": 3,
     "enabled": true,
-    "cooldownMinutes": 60,
+    "cooldownMinutes": 1,
     "askEmail": false,
     "platforms": ["instagram"],
     "commentReply": "¡Te mando los detalles del curso al privado! 📚",

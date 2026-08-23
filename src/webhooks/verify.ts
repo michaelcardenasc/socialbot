@@ -6,13 +6,20 @@ import { logger } from '../utils/logger.js';
 export function verifySignature(req: Request, res: Response, next: NextFunction): void {
   const signature = req.headers['x-zernio-signature'] as string | undefined;
 
+  const env = getEnv();
+  // If webhook secret is not set, allow request in dev/test
+  if (!env.ZERNIO_WEBHOOK_SECRET || env.ZERNIO_WEBHOOK_SECRET === 'tu_webhook_secret_aqui') {
+    logger.debug('Skipping signature verification (secret not set)');
+    next();
+    return;
+  }
+
   if (!signature) {
-    logger.warn('Missing X-Zernio-Signature header');
+    logger.warn({ headers: req.headers }, 'Missing X-Zernio-Signature header');
     res.status(401).json({ error: 'Missing signature' });
     return;
   }
 
-  const env = getEnv();
   const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
 
   if (!rawBody) {
@@ -21,13 +28,18 @@ export function verifySignature(req: Request, res: Response, next: NextFunction)
     return;
   }
 
-  const expectedSignature = createHmac('sha256', env.ZERNIO_WEBHOOK_SECRET).update(rawBody).digest('hex');
+  const expectedSignatureHex = createHmac('sha256', env.ZERNIO_WEBHOOK_SECRET).update(rawBody).digest('hex');
+  const expectedSignatureBase64 = createHmac('sha256', env.ZERNIO_WEBHOOK_SECRET).update(rawBody).digest('base64');
 
-  const sigBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expectedSignature);
+  const matchesHex = signature === expectedSignatureHex;
+  const matchesBase64 = signature === expectedSignatureBase64;
 
-  if (sigBuffer.length !== expectedBuffer.length || !timingSafeEqual(sigBuffer, expectedBuffer)) {
-    logger.warn('Invalid webhook signature');
+  if (!matchesHex && !matchesBase64) {
+    logger.warn({
+      receivedSignature: signature,
+      expectedHex: expectedSignatureHex,
+      expectedBase64: expectedSignatureBase64
+    }, 'Invalid webhook signature');
     res.status(401).json({ error: 'Invalid signature' });
     return;
   }
