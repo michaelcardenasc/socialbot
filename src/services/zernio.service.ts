@@ -35,13 +35,19 @@ async function zernioFetch<T>(endpoint: string, options: RequestInit = {}): Prom
 export async function sendTextDM(
   conversationId: string,
   text: string,
+  accountId?: string,
 ): Promise<ZernioSendMessageResponse> {
-  logger.debug({ conversationId }, 'Sending text DM via Zernio');
+  const env = getEnv();
+  const targetAccountId = accountId || env.ZERNIO_ACCOUNT_ID;
+  logger.debug({ conversationId, accountId: targetAccountId }, 'Sending text DM via Zernio');
   return zernioFetch<ZernioSendMessageResponse>(
     `/inbox/conversations/${conversationId}/messages`,
     {
       method: 'POST',
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({
+        accountId: targetAccountId,
+        message: text,
+      }),
     },
   );
 }
@@ -54,13 +60,21 @@ export async function sendMediaDM(
   text: string,
   attachmentUrl: string,
   attachmentType: 'image' | 'video' | 'audio' | 'file',
+  accountId?: string,
 ): Promise<ZernioSendMessageResponse> {
-  logger.debug({ conversationId, attachmentType }, 'Sending media DM via Zernio');
+  const env = getEnv();
+  const targetAccountId = accountId || env.ZERNIO_ACCOUNT_ID;
+  logger.debug({ conversationId, attachmentType, accountId: targetAccountId }, 'Sending media DM via Zernio');
   return zernioFetch<ZernioSendMessageResponse>(
     `/inbox/conversations/${conversationId}/messages`,
     {
       method: 'POST',
-      body: JSON.stringify({ message: text, attachmentUrl, attachmentType }),
+      body: JSON.stringify({
+        accountId: targetAccountId,
+        message: text,
+        attachmentUrl,
+        attachmentType,
+      }),
     },
   );
 }
@@ -72,8 +86,9 @@ export async function sendImageDM(
   conversationId: string,
   text: string,
   imageUrl: string,
+  accountId?: string,
 ): Promise<ZernioSendMessageResponse> {
-  return sendMediaDM(conversationId, text, imageUrl, 'image');
+  return sendMediaDM(conversationId, text, imageUrl, 'image', accountId);
 }
 
 /**
@@ -83,8 +98,9 @@ export async function sendAudioDM(
   conversationId: string,
   text: string,
   audioUrl: string,
+  accountId?: string,
 ): Promise<ZernioSendMessageResponse> {
-  return sendMediaDM(conversationId, text, audioUrl, 'audio');
+  return sendMediaDM(conversationId, text, audioUrl, 'audio', accountId);
 }
 
 /**
@@ -94,8 +110,9 @@ export async function sendVideoDM(
   conversationId: string,
   text: string,
   videoUrl: string,
+  accountId?: string,
 ): Promise<ZernioSendMessageResponse> {
-  return sendMediaDM(conversationId, text, videoUrl, 'video');
+  return sendMediaDM(conversationId, text, videoUrl, 'video', accountId);
 }
 
 /**
@@ -105,8 +122,9 @@ export async function sendFileDM(
   conversationId: string,
   text: string,
   fileUrl: string,
+  accountId?: string,
 ): Promise<ZernioSendMessageResponse> {
-  return sendMediaDM(conversationId, text, fileUrl, 'file');
+  return sendMediaDM(conversationId, text, fileUrl, 'file', accountId);
 }
 
 /**

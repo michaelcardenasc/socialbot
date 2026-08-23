@@ -8,6 +8,7 @@ import { getKeywordRules, matchKeyword } from '../services/keyword.service.js';
 import { isOnCooldown, isRateLimited, recordTrigger } from '../services/cooldown.service.js';
 import { renderTemplate } from '../utils/templates.js';
 import { getEnv } from '../config/env.js';
+import { executeResponse } from '../services/sequence.service.js';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,6 +26,7 @@ export async function handleMessage(event: ZernioMessageData, accountId: string)
     direction: 'inbound',
     messageType: 'text',
     content: text,
+    conversationId,
   }).catch((err) => logger.error({ err }, 'Failed to log inbound DM'));
 
   if (!text) return;
@@ -74,22 +76,9 @@ async function handleEmailCollection(
     const rule = getKeywordRules().find((r) => r.id === lead.keyword_id);
 
     if (rule?.followUp) {
-      let textToSend = rule.followUp.text;
-      if (rule.followUp.type === 'button' && rule.followUp.buttons?.length) {
-        const buttonTexts = rule.followUp.buttons.map((b) => `- ${b.title}`).join('\n');
-        textToSend += '\n\nOpciones:\n' + buttonTexts;
-      }
-      await sendTextDM(conversationId, textToSend);
-
-      logDM({
-        igUserId: senderId,
-        direction: 'outbound',
-        messageType: 'followup',
-        keywordId: rule.id,
-        content: textToSend,
-      }).catch(() => {});
+      await executeResponse(conversationId, rule.followUp, { username: lead.ig_username ?? 'amigo' }, { keywordId: rule.id, igUserId: senderId });
     } else {
-      await sendTextDM(conversationId, 'Genial, ya quedo guardado tu email! Te vamos a enviar info pronto.');
+      await sendTextDM(conversationId, 'Genial, ya quedo guardado tu email! Te vamos a enviar info pronto.', accountId);
     }
 
     // Send emails if Resend is configured
@@ -112,7 +101,7 @@ async function handleEmailCollection(
     logger.info({ senderId, email: text, keywordId: lead.keyword_id }, 'Email collected, followUp sent');
   } else {
     // Not a valid email — ask again
-    await sendTextDM(conversationId, 'Hmm, no parece un email valido. Podes enviarmelo de nuevo?');
+    await sendTextDM(conversationId, 'Hmm, no parece un email valido. Podes enviarmelo de nuevo?', accountId);
   }
 }
 
@@ -153,28 +142,17 @@ async function handleKeywordDM(
       igUsername: username,
       source: 'dm',
       keywordId: rule.id,
+      conversationId,
     });
   } catch (err) {
     logger.error({ err, senderId }, 'Failed to upsert lead (continuing with DM)');
   }
 
-  // Send keyword response
-  let textToSend = renderTemplate(rule.response.text, { username });
-  if (rule.response.type === 'button' && rule.response.buttons?.length) {
-    const buttonTexts = rule.response.buttons.map((b) => `- ${b.title}`).join('\n');
-    textToSend += '\n\nOpciones:\n' + buttonTexts;
-  }
-  await sendTextDM(conversationId, textToSend);
+  // Execute keyword response (handles text, audio, image, video, sequences)
+  await executeResponse(conversationId, rule.response, { username }, { keywordId: rule.id, igUserId: senderId });
 
-  // Record trigger & log
+  // Record trigger
   recordTrigger(senderId, rule.id);
-  logDM({
-    igUserId: senderId,
-    direction: 'outbound',
-    messageType: rule.response.type,
-    keywordId: rule.id,
-    content: textToSend,
-  }).catch((err) => logger.error({ err }, 'Failed to log DM'));
 
   logger.info({ senderId, ruleId: rule.id }, 'Keyword DM sent successfully');
 }
