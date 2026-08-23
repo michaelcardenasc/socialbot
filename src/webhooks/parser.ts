@@ -1,9 +1,9 @@
 import type {
-  ZernioWebhookPayload,
   ParsedZernioEvent,
   ZernioCommentData,
   ZernioMessageData,
 } from '../types/zernio.types.js';
+import { logger } from '../utils/logger.js';
 
 export type { ParsedZernioEvent };
 
@@ -12,68 +12,86 @@ export function parseWebhookPayload(payload: any): ParsedZernioEvent[] {
   if (!payload) return events;
 
   const eventName = (payload.event || payload.type || '').toLowerCase();
-  const platform = payload.platform || 'instagram';
-  const accountId = payload.accountId || payload.account_id || '';
-  const data = payload.data || payload.body || payload;
+  const platform = payload.platform || payload.conversation?.platform || 'instagram';
+  const accountId =
+    payload.accountId ||
+    payload.account?.id ||
+    payload.account_id ||
+    payload.conversation?.accountId ||
+    '';
 
+  logger.info({ eventName, platform, accountId }, '🔍 Parsing webhook event');
+
+  // ── COMMENT events ──────────────────────────────────────────────────────────
   if (eventName.includes('comment')) {
+    const d = payload.data || payload.comment || payload;
     const commentData: ZernioCommentData = {
-      commentId: data.commentId || data.comment_id || data.id || '',
-      postId: data.postId || data.post_id || data.media_id || '',
+      commentId: d.commentId || d.comment_id || d.id || '',
+      postId: d.postId || d.post_id || d.media_id || '',
       sender: {
-        id: data.sender?.id || data.from?.id || data.user_id || '',
-        username: data.sender?.username || data.from?.username || data.username || 'amigo',
-        name: data.sender?.name || data.from?.name || data.name,
+        id: d.sender?.id || d.from?.id || d.user_id || d.participantId || '',
+        username: d.sender?.username || d.from?.username || d.participantUsername || d.username || 'amigo',
+        name: d.sender?.name || d.from?.name || d.participantName || d.name,
       },
-      text: data.text || data.message || data.content || '',
-      parentCommentId: data.parentCommentId || data.parent_id,
+      text: d.text || d.message || d.content || '',
+      parentCommentId: d.parentCommentId || d.parent_id,
     };
+    events.push({ type: 'comment', platform, data: commentData, accountId });
+    return events;
+  }
 
-    events.push({
-      type: 'comment',
-      platform,
-      data: commentData,
-      accountId,
-    });
-  } else if (eventName.includes('message')) {
+  // ── CONVERSATION.STARTED (new DM initiated by a user) ───────────────────────
+  if (eventName === 'conversation.started' || eventName.includes('conversation')) {
+    const conv = payload.conversation || payload.data || payload;
+    const sender = {
+      id: conv.participantId || conv.participant_id || conv.sender?.id || '',
+      username: conv.participantUsername || conv.participant_username || conv.sender?.username || 'amigo',
+      name: conv.participantName || conv.participant_name || conv.sender?.name,
+    };
+    const conversationId = conv.platformConversationId || conv.id || conv.conversationId || sender.id;
+
     const messageData: ZernioMessageData = {
-      conversationId: data.conversationId || data.conversation_id || data.threadId || data.id || data.sender?.id || '',
-      messageId: data.messageId || data.message_id || data.id || '',
+      conversationId,
+      messageId: payload.id || payload.eventId || '',
+      sender,
+      text: payload.msg || payload.message || payload.text || payload.lastMessage || '',
+      attachments: [],
+      metadata: {},
+    };
+    events.push({ type: 'message', platform, data: messageData, accountId });
+    return events;
+  }
+
+  // ── MESSAGE.RECEIVED (reply in existing thread) ──────────────────────────────
+  if (eventName.includes('message')) {
+    const d = payload.data || payload.message || payload;
+    const postbackPayload = d.metadata?.postbackPayload || d.postbackPayload || d.payload;
+
+    const messageData: ZernioMessageData = {
+      conversationId: d.conversationId || d.conversation_id || d.threadId || d.sender?.id || '',
+      messageId: d.messageId || d.message_id || d.id || '',
       sender: {
-        id: data.sender?.id || data.from?.id || data.participantId || data.user_id || '',
-        username: data.sender?.username || data.from?.username || data.participantUsername || data.username || 'amigo',
-        name: data.sender?.name || data.from?.name || data.participantName || data.name,
+        id: d.sender?.id || d.from?.id || d.participantId || d.user_id || '',
+        username: d.sender?.username || d.from?.username || d.participantUsername || d.username || 'amigo',
+        name: d.sender?.name || d.from?.name || d.participantName || d.name,
       },
-      text: data.text || data.message || data.content || '',
-      attachments: data.attachments || [],
-      metadata: data.metadata || {
-        postbackPayload: data.postbackPayload || data.payload,
-        postbackTitle: data.postbackTitle || data.title,
-      },
+      text: typeof d.text === 'string' ? d.text : (typeof d.message === 'string' ? d.message : (d.content || '')),
+      attachments: d.attachments || [],
+      metadata: d.metadata || { postbackPayload, postbackTitle: d.postbackTitle },
     };
 
-    if (messageData.metadata?.postbackPayload) {
-      events.push({
-        type: 'postback',
-        platform,
-        data: messageData,
-        accountId,
-      });
+    if (postbackPayload) {
+      events.push({ type: 'postback', platform, data: messageData, accountId });
     } else {
-      events.push({
-        type: 'message',
-        platform,
-        data: messageData,
-        accountId,
-      });
+      events.push({ type: 'message', platform, data: messageData, accountId });
     }
-  } else if (eventName.includes('reaction')) {
-    events.push({
-      type: 'reaction',
-      platform,
-      data: data as ZernioMessageData,
-      accountId,
-    });
+    return events;
+  }
+
+  // ── REACTION events ──────────────────────────────────────────────────────────
+  if (eventName.includes('reaction')) {
+    const d = payload.data || payload;
+    events.push({ type: 'reaction', platform, data: d as ZernioMessageData, accountId });
   }
 
   return events;
