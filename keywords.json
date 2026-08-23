@@ -9,7 +9,7 @@
     "cooldownMinutes": 0,
     "askEmail": false,
     "platforms": ["instagram", "facebook"],
-    "commentReply": "¡Hola! Te escribí por DM 🙌",
+    "commentReply": "¡Hola @{{username}}! 👋 Escríbeme 'HOLA' por mensaje directo o toca 'Enviar mensaje' para ver todas las opciones disponibles 🙌",
     "response": {
       "type": "sequence",
       "text": "",
@@ -31,6 +31,7 @@
     "cooldownMinutes": 0,
     "askEmail": false,
     "platforms": ["instagram", "facebook"],
+    "commentReply": "¡Hola @{{username}}! 🚀 Escríbeme 'CURSO' por DM para enviarte el temario completo y tu descuento especial.",
     "response": {
       "type": "sequence",
       "text": "",
@@ -56,7 +57,7 @@
     "cooldownMinutes": 0,
     "askEmail": false,
     "platforms": ["instagram", "facebook"],
-    "commentReply": "¡Revisa tus DMs para el regalo! 🎁",
+    "commentReply": "¡Hola @{{username}}! 🎁 Envíame un mensaje con 'REGALO' por DM para enviarte tu descarga gratuita al instante.",
     "response": {
       "type": "sequence",
       "text": "",
@@ -78,7 +79,7 @@
     "cooldownMinutes": 0,
     "askEmail": false,
     "platforms": ["instagram", "facebook"],
-    "commentReply": "¡Te mando toda la info al DM! 📩",
+    "commentReply": "¡Hola @{{username}}! 📩 Escríbeme 'INFO' por mensaje directo o toca 'Enviar mensaje' para ver la lista de precios y la oferta especial 💎",
     "response": {
       "type": "sequence",
       "text": "",
@@ -104,6 +105,7 @@
     "cooldownMinutes": 0,
     "askEmail": false,
     "platforms": ["instagram", "facebook"],
+    "commentReply": "¡Hola @{{username}}! 🤝 Escríbenos por DM y un asesor de nuestro equipo te atenderá de inmediato.",
     "response": {
       "type": "sequence",
       "text": "",

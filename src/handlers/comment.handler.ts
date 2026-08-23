@@ -3,6 +3,7 @@ import { matchKeyword } from '../services/keyword.service.js';
 import { isOnCooldown, isRateLimited, recordTrigger } from '../services/cooldown.service.js';
 import { sendTextDM, replyToComment, getCommentAuthor } from '../services/zernio.service.js';
 import { executeResponse } from '../services/sequence.service.js';
+import { renderTemplate } from '../utils/templates.js';
 import { logger } from '../utils/logger.js';
 import { upsertLead } from '../services/lead.service.js';
 import { logDM } from '../services/dmlog.service.js';
@@ -23,7 +24,6 @@ export async function handleComment(comment: ZernioCommentData, accountId: strin
 
   // If userId is missing, fetch from Zernio
   if (!userId || userId === 'amigo') {
-    logger.info({ commentId, postId }, 'Attempting to lookup commenter author from Zernio API...');
     const author = await getCommentAuthor(accountId, postId, commentId);
     if (author) {
       userId = author.id;
@@ -34,7 +34,7 @@ export async function handleComment(comment: ZernioCommentData, accountId: strin
   }
 
   if (!username || username === 'amigo') {
-    username = sender.username || 'amigo';
+    username = sender?.username || 'amigo';
   }
 
   if (!text || !text.trim()) {
@@ -52,66 +52,57 @@ export async function handleComment(comment: ZernioCommentData, accountId: strin
 
   logger.info({ ruleId: rule.id, keyword: rule.keyword, username, userId }, '🎯 Keyword matched from comment');
 
-  // 2. Check rate limit
+  // 2. Check rate limit & cooldown
   if (userId && isRateLimited(userId)) {
-    logger.warn({ userId }, 'User rate limited (max DMs/hour)');
+    logger.warn({ userId }, 'User rate limited');
     return;
   }
 
-  // 3. Check cooldown
   if (userId && isOnCooldown(userId, rule.id, rule.cooldownMinutes)) {
     logger.info({ userId, ruleId: rule.id }, 'Skipped — user on cooldown');
     return;
   }
 
-  // 4. Reply publicly to comment first
+  const vars = {
+    username,
+    name: sender?.name || username,
+  };
+
+  // 3. Reply publicly to comment first
   if (commentId) {
-    const publicReply = rule.commentReply || '¡Hola! Te envié un mensaje directo 📩';
+    const rawReply = rule.commentReply || '¡Hola @{{username}}! Te envié un mensaje directo 📩';
+    const publicReply = renderTemplate(rawReply, vars);
     try {
       await replyToComment(accountId, commentId, publicReply);
-      logger.info({ commentId, reply: publicReply }, 'Public comment reply sent');
+      logger.info({ commentId, reply: publicReply }, '✅ Public comment reply sent');
     } catch (replyErr) {
       logger.error({ replyErr, commentId }, 'Failed to reply publicly to comment');
     }
   }
 
-  // 5. Send DM response (supports text, media, sequence, menu)
-  if (!userId || userId === 'amigo') {
-    logger.warn({ comment }, 'Cannot send DM: unable to identify commenter user ID');
-    return;
-  }
+  // 4. Try sending DM response if user has open window
+  if (userId && userId !== 'amigo') {
+    try {
+      await upsertLead({
+        igUserId: userId,
+        igUsername: username,
+        source: 'comment',
+        keywordId: rule.id,
+        conversationId: userId,
+      });
 
-  const vars = {
-    username,
-    name: sender.name || username,
-  };
+      await executeResponse(userId, rule.response, vars, {
+        keywordId: rule.id,
+        igUserId: userId,
+        accountId,
+      });
 
-  try {
-    // Upsert lead in DB
-    await upsertLead({
-      igUserId: userId,
-      igUsername: username,
-      source: 'comment',
-      keywordId: rule.id,
-      conversationId: userId,
-    });
-
-    // Send full response / sequence to the user via DM
-    await executeResponse(userId, rule.response, vars, {
-      keywordId: rule.id,
-      igUserId: userId,
-      accountId,
-    });
-
-    // Record trigger
-    recordTrigger(userId, rule.id);
-
-    logger.info(
-      { userId, username, ruleId: rule.id, commentId },
-      '✅ Comment handled and DM sent successfully',
-    );
-  } catch (err) {
-    logger.error({ err, userId, ruleId: rule.id }, 'Failed to send DM for comment');
+      recordTrigger(userId, rule.id);
+      logger.info({ userId, username, ruleId: rule.id }, '✅ DM sent successfully to commenter');
+    } catch (err: any) {
+      // If Meta 24h window closed, the public comment reply already guided them to DM!
+      logger.warn({ err: err?.message, userId }, 'DM could not be initiated directly (24h window policy)');
+    }
   }
 }
 
