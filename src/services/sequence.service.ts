@@ -24,12 +24,13 @@ export async function executeSequence(
   conversationId: string,
   steps: SequenceStep[],
   vars: Record<string, string>,
-  options?: { keywordId?: string; igUserId?: string },
+  options?: { keywordId?: string; igUserId?: string; accountId?: string },
 ): Promise<void> {
   const keywordId = options?.keywordId;
   const igUserId = options?.igUserId ?? conversationId;
+  const accountId = options?.accountId;
 
-  logger.info({ conversationId, steps: steps.length, keywordId }, 'Executing sequence');
+  logger.info({ conversationId, steps: steps.length, keywordId, accountId }, 'Executing sequence');
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
@@ -43,7 +44,7 @@ export async function executeSequence(
         const text = step.text
           ? renderTemplate(step.text, vars)
           : (step.media.caption ? renderTemplate(step.media.caption, vars) : '');
-        await sendMediaDM(conversationId, text, step.media.url, step.media.type);
+        await sendMediaDM(conversationId, text, step.media.url, step.media.type, accountId);
         logDM({
           igUserId,
           direction: 'outbound',
@@ -57,7 +58,7 @@ export async function executeSequence(
         if (step.buttons && step.buttons.length > 0) {
           textToSend += '\n\n' + formatButtonsAsText(step.buttons);
         }
-        await sendTextDM(conversationId, textToSend);
+        await sendTextDM(conversationId, textToSend, accountId);
         logDM({
           igUserId,
           direction: 'outbound',
@@ -68,7 +69,7 @@ export async function executeSequence(
         }).catch(() => {});
       } else if (step.buttons && step.buttons.length > 0) {
         const textToSend = formatButtonsAsText(step.buttons);
-        await sendTextDM(conversationId, textToSend);
+        await sendTextDM(conversationId, textToSend, accountId);
         logDM({
           igUserId,
           direction: 'outbound',
@@ -94,16 +95,19 @@ export async function executeResponse(
   conversationId: string,
   response: KeywordResponse,
   vars: Record<string, string>,
-  options?: { keywordId?: string; igUserId?: string },
+  options?: { keywordId?: string; igUserId?: string; accountId?: string },
 ): Promise<void> {
   const keywordId = options?.keywordId;
   const igUserId = options?.igUserId ?? conversationId;
+  const accountId = options?.accountId;
+
+  logger.info({ conversationId, type: response.type, keywordId, accountId }, 'Executing response');
 
   try {
     switch (response.type) {
       case 'text': {
         const text = renderTemplate(response.text, vars);
-        await sendTextDM(conversationId, text);
+        await sendTextDM(conversationId, text, accountId);
         logDM({
           igUserId,
           direction: 'outbound',
@@ -119,7 +123,7 @@ export async function executeResponse(
         if (response.buttons && response.buttons.length > 0) {
           text += '\n\n' + formatButtonsAsText(response.buttons);
         }
-        await sendTextDM(conversationId, text);
+        await sendTextDM(conversationId, text, accountId);
         logDM({
           igUserId,
           direction: 'outbound',
@@ -136,7 +140,7 @@ export async function executeResponse(
             const text = response.text
               ? renderTemplate(response.text, vars)
               : (media.caption ? renderTemplate(media.caption, vars) : '');
-            await sendMediaDM(conversationId, text, media.url, media.type);
+            await sendMediaDM(conversationId, text, media.url, media.type, accountId);
             logDM({
               igUserId,
               direction: 'outbound',
@@ -151,7 +155,7 @@ export async function executeResponse(
       }
       case 'sequence': {
         if (response.sequence && response.sequence.length > 0) {
-          await executeSequence(conversationId, response.sequence, vars, { keywordId, igUserId });
+          await executeSequence(conversationId, response.sequence, vars, { keywordId, igUserId, accountId });
         }
         break;
       }

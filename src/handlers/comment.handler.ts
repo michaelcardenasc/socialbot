@@ -16,10 +16,10 @@ export function maskEmail(email: string): string {
 
 export async function handleComment(comment: ZernioCommentData, accountId: string): Promise<void> {
   const { sender, text, commentId } = comment;
-  const userId = sender.id;
+  const userId = sender.id || sender.username;
   const username = sender.username || 'amigo';
 
-  logger.info({ userId, username, text, commentId, accountId }, '💬 Processing comment');
+  logger.info({ comment, userId, username, text, commentId, accountId }, '💬 Processing comment');
 
   if (!text || !text.trim()) {
     logger.debug('Empty comment text, skipping');
@@ -72,6 +72,7 @@ export async function handleComment(comment: ZernioCommentData, accountId: strin
     await executeResponse(userId, rule.response, vars, {
       keywordId: rule.id,
       igUserId: userId,
+      accountId,
     });
 
     // 6. Reply publicly to comment if commentId exists
