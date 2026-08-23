@@ -6,11 +6,11 @@ import { getDb } from './db.js';
 
 let rules: KeywordRule[] = [];
 
-/** Load keyword rules from DB; fall back to keywords.json on error */
+/** Load keyword rules from DB; seed from keywords.json if DB is empty */
 export async function loadKeywordRulesFromDb(): Promise<KeywordRule[]> {
   try {
     const db = getDb();
-    const rows = await db<{
+    let rows = await db<{
       id: string; keyword: string; aliases: string[]; match_type: string;
       priority: number; enabled: boolean; cooldown_minutes: number;
       ask_email: boolean; platforms: string[]; comment_reply: string | null;
@@ -20,8 +20,24 @@ export async function loadKeywordRulesFromDb(): Promise<KeywordRule[]> {
     `;
 
     if (rows.length === 0) {
-      logger.info('No keyword rules in DB, falling back to keywords.json');
-      return loadKeywordRules();
+      logger.info('Seeding keyword rules into DB from keywords.json...');
+      const fileRules = loadKeywordRules();
+      for (const rule of fileRules) {
+        await db`
+          INSERT INTO keyword_rules (id, keyword, aliases, match_type, priority, enabled,
+            cooldown_minutes, ask_email, platforms, comment_reply, response, follow_up)
+          VALUES (
+            ${rule.id}, ${rule.keyword}, ${JSON.stringify(rule.aliases || [])},
+            ${rule.matchType || 'contains'}, ${rule.priority || 10}, ${rule.enabled !== false},
+            ${rule.cooldownMinutes || 60}, ${rule.askEmail || false},
+            ${JSON.stringify(rule.platforms || ['instagram', 'facebook'])},
+            ${rule.commentReply || null}, ${JSON.stringify(rule.response)},
+            ${rule.followUp ? JSON.stringify(rule.followUp) : null}
+          )
+          ON CONFLICT (id) DO NOTHING
+        `;
+      }
+      rows = await db`SELECT * FROM keyword_rules WHERE enabled = true ORDER BY priority ASC`;
     }
 
     rules = rows.map((r) => ({

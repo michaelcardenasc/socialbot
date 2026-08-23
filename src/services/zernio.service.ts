@@ -136,23 +136,7 @@ export async function initiateDM(
   text: string,
   attachment?: { url: string; type: 'image' | 'video' | 'audio' | 'file' },
 ): Promise<ZernioInitiateDMResponse> {
-  logger.debug({ accountId, participantId }, 'Initiating DM via Zernio');
-
-  const body: Record<string, unknown> = {
-    accountId,
-    participantId,
-    message: text,
-  };
-
-  if (attachment) {
-    body.attachmentUrl = attachment.url;
-    body.attachmentType = attachment.type;
-  }
-
-  return zernioFetch<ZernioInitiateDMResponse>('/inbox', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+  return sendTextDM(participantId, text, accountId) as any;
 }
 
 /**
@@ -171,6 +155,38 @@ export async function replyToComment(
       body: JSON.stringify({ commentId, accountId, message: text }),
     },
   );
+}
+
+/**
+ * Get comment author info from Zernio
+ */
+export async function getCommentAuthor(
+  accountId: string,
+  postId: string,
+  commentId: string,
+): Promise<{ id: string; username: string; name?: string } | null> {
+  try {
+    if (!postId) return null;
+    const res = await zernioFetch<{
+      status: string;
+      comments?: Array<{
+        id: string;
+        from?: { id: string; username: string; name?: string };
+      }>;
+    }>(`/inbox/comments/${postId}?accountId=${accountId}`);
+
+    const found = res.comments?.find((c) => c.id === commentId);
+    if (found?.from?.id) {
+      return {
+        id: found.from.id,
+        username: found.from.username || 'amigo',
+        name: found.from.name,
+      };
+    }
+  } catch (err) {
+    logger.warn({ err, postId, commentId }, 'Failed to lookup comment author from Zernio');
+  }
+  return null;
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { ZernioCommentData } from '../types/zernio.types.js';
 import { matchKeyword } from '../services/keyword.service.js';
 import { isOnCooldown, isRateLimited, recordTrigger } from '../services/cooldown.service.js';
-import { sendTextDM, replyToComment } from '../services/zernio.service.js';
+import { sendTextDM, replyToComment, getCommentAuthor } from '../services/zernio.service.js';
 import { executeResponse } from '../services/sequence.service.js';
 import { logger } from '../utils/logger.js';
 import { upsertLead } from '../services/lead.service.js';
@@ -15,11 +15,27 @@ export function maskEmail(email: string): string {
 }
 
 export async function handleComment(comment: ZernioCommentData, accountId: string): Promise<void> {
-  const { sender, text, commentId } = comment;
-  const userId = sender.id || sender.username;
-  const username = sender.username || 'amigo';
+  let { sender, text, commentId, postId } = comment;
+  let userId = sender?.id || '';
+  let username = sender?.username || '';
 
   logger.info({ comment, userId, username, text, commentId, accountId }, '💬 Processing comment');
+
+  // If userId is missing, fetch from Zernio
+  if (!userId || userId === 'amigo') {
+    logger.info({ commentId, postId }, 'Attempting to lookup commenter author from Zernio API...');
+    const author = await getCommentAuthor(accountId, postId, commentId);
+    if (author) {
+      userId = author.id;
+      username = author.username;
+      sender = { id: author.id, username: author.username, name: author.name };
+      logger.info({ author }, '✅ Resolved commenter author from Zernio API');
+    }
+  }
+
+  if (!username || username === 'amigo') {
+    username = sender.username || 'amigo';
+  }
 
   if (!text || !text.trim()) {
     logger.debug('Empty comment text, skipping');
@@ -34,22 +50,44 @@ export async function handleComment(comment: ZernioCommentData, accountId: strin
     return;
   }
 
-  logger.info({ ruleId: rule.id, keyword: rule.keyword, username }, '🎯 Keyword matched from comment');
+  logger.info({ ruleId: rule.id, keyword: rule.keyword, username, userId }, '🎯 Keyword matched from comment');
 
   // 2. Check rate limit
-  if (isRateLimited(userId)) {
+  if (userId && isRateLimited(userId)) {
     logger.warn({ userId }, 'User rate limited (max DMs/hour)');
     return;
   }
 
   // 3. Check cooldown
-  if (isOnCooldown(userId, rule.id, rule.cooldownMinutes)) {
+  if (userId && isOnCooldown(userId, rule.id, rule.cooldownMinutes)) {
     logger.info({ userId, ruleId: rule.id }, 'Skipped — user on cooldown');
     return;
   }
 
-  // 4. Upsert lead in DB
+  // 4. Reply publicly to comment first
+  if (commentId) {
+    const publicReply = rule.commentReply || '¡Hola! Te envié un mensaje directo 📩';
+    try {
+      await replyToComment(accountId, commentId, publicReply);
+      logger.info({ commentId, reply: publicReply }, 'Public comment reply sent');
+    } catch (replyErr) {
+      logger.error({ replyErr, commentId }, 'Failed to reply publicly to comment');
+    }
+  }
+
+  // 5. Send DM response (supports text, media, sequence, menu)
+  if (!userId || userId === 'amigo') {
+    logger.warn({ comment }, 'Cannot send DM: unable to identify commenter user ID');
+    return;
+  }
+
+  const vars = {
+    username,
+    name: sender.name || username,
+  };
+
   try {
+    // Upsert lead in DB
     await upsertLead({
       igUserId: userId,
       igUsername: username,
@@ -57,17 +95,7 @@ export async function handleComment(comment: ZernioCommentData, accountId: strin
       keywordId: rule.id,
       conversationId: userId,
     });
-  } catch (err) {
-    logger.error({ err, userId }, 'Failed to upsert lead (continuing with DM)');
-  }
 
-  // 5. Send DM response (supports text, media, sequence, menu)
-  const vars = {
-    username,
-    name: sender.name || username,
-  };
-
-  try {
     // Send full response / sequence to the user via DM
     await executeResponse(userId, rule.response, vars, {
       keywordId: rule.id,
@@ -75,18 +103,7 @@ export async function handleComment(comment: ZernioCommentData, accountId: strin
       accountId,
     });
 
-    // 6. Reply publicly to comment if commentId exists
-    if (commentId) {
-      const publicReply = rule.commentReply || '¡Hola! Te envié un mensaje directo 📩';
-      try {
-        await replyToComment(accountId, commentId, publicReply);
-        logger.info({ commentId, reply: publicReply }, 'Public comment reply sent');
-      } catch (replyErr) {
-        logger.error({ replyErr, commentId }, 'Failed to reply publicly to comment');
-      }
-    }
-
-    // 7. Record trigger
+    // Record trigger
     recordTrigger(userId, rule.id);
 
     logger.info(
