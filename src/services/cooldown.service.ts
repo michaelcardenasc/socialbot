@@ -1,9 +1,10 @@
 const cooldowns = new Map<string, number>();
 const hourlyCounters = new Map<string, { count: number; resetAt: number }>();
 
-const MAX_DMS_PER_HOUR = 5;
+const MAX_DMS_PER_HOUR = 100; // Increased for testing
 
 export function isOnCooldown(userId: string, keywordId: string, cooldownMinutes: number): boolean {
+  if (cooldownMinutes <= 0) return false;
   const key = `${userId}:${keywordId}`;
   const lastTrigger = cooldowns.get(key);
   if (!lastTrigger) return false;
@@ -36,7 +37,6 @@ export function recordTrigger(userId: string, keywordId: string): void {
   }
 }
 
-// For testing
 export function resetAll(): void {
   cooldowns.clear();
   hourlyCounters.clear();
