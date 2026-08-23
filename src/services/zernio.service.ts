@@ -158,34 +158,63 @@ export async function replyToComment(
 }
 
 /**
- * Get comment author info from Zernio
+ * Get comment author info from Zernio (searches specific post or all posts)
  */
 export async function getCommentAuthor(
   accountId: string,
   postId: string,
   commentId: string,
 ): Promise<{ id: string; username: string; name?: string } | null> {
-  try {
-    if (!postId) return null;
-    const res = await zernioFetch<{
-      status: string;
-      comments?: Array<{
-        id: string;
-        from?: { id: string; username: string; name?: string };
-      }>;
-    }>(`/inbox/comments/${postId}?accountId=${accountId}`);
+  // 1. Check specific post if postId provided
+  if (postId) {
+    try {
+      const res = await zernioFetch<{
+        status: string;
+        comments?: Array<{
+          id: string;
+          from?: { id: string; username: string; name?: string };
+        }>;
+      }>(`/inbox/comments/${postId}?accountId=${accountId}`);
 
-    const found = res.comments?.find((c) => c.id === commentId);
-    if (found?.from?.id) {
-      return {
-        id: found.from.id,
-        username: found.from.username || 'amigo',
-        name: found.from.name,
-      };
+      const found = res.comments?.find((c) => c.id === commentId);
+      if (found?.from?.id) {
+        return {
+          id: found.from.id,
+          username: found.from.username || 'amigo',
+          name: found.from.name,
+        };
+      }
+    } catch {}
+  }
+
+  // 2. Fallback: Search all recent posts
+  try {
+    const listRes = await zernioFetch<{ data?: Array<{ id: string; commentCount: number }> }>(
+      `/inbox/comments?accountId=${accountId}`,
+    );
+    for (const post of listRes.data || []) {
+      try {
+        const postRes = await zernioFetch<{
+          comments?: Array<{
+            id: string;
+            from?: { id: string; username: string; name?: string };
+          }>;
+        }>(`/inbox/comments/${post.id}?accountId=${accountId}`);
+
+        const found = postRes.comments?.find((c) => c.id === commentId);
+        if (found?.from?.id) {
+          return {
+            id: found.from.id,
+            username: found.from.username || 'amigo',
+            name: found.from.name,
+          };
+        }
+      } catch {}
     }
   } catch (err) {
-    logger.warn({ err, postId, commentId }, 'Failed to lookup comment author from Zernio');
+    logger.warn({ err, commentId }, 'Failed to lookup comment author across posts');
   }
+
   return null;
 }
 

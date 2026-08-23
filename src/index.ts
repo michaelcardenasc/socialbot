@@ -7,6 +7,7 @@ import { logger } from './utils/logger.js';
 import { loadKeywordRulesFromDb } from './services/keyword.service.js';
 import { initDb } from './services/db.js';
 import { startEmailReminder } from './services/reminder.service.js';
+import { startCommentSync } from './services/comment_sync.service.js';
 import { webhookRouter } from './webhooks/router.js';
 import { adminRouter } from './admin/router.js';
 
@@ -52,6 +53,7 @@ initDb()
   .then(async () => {
     await loadKeywordRulesFromDb();
     startEmailReminder();
+    startCommentSync();
     app.listen(env.PORT, '0.0.0.0', () => {
       logger.info({ port: env.PORT, env: env.NODE_ENV }, 'SocialBot server started');
     });
